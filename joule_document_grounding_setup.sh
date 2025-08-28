@@ -468,6 +468,89 @@ test_endpoints() {
     else
         print_warning "Unexpected response received"
     fi
+    
+    # Parse and display pipeline information for selection
+    if [[ "$RESPONSE" != "[]" ]] && [[ "$RESPONSE" != "null" ]]; then
+        echo ""
+        print_status "Available Pipelines:"
+        
+        # Extract pipeline information using grep and sed
+        PIPELINE_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
+        if [ -z "$PIPELINE_COUNT" ]; then
+            # If no count field, count the number of pipeline objects manually
+            PIPELINE_COUNT=$(echo "$RESPONSE" | grep -o '"id":' | wc -l)
+        fi
+        
+        if [ -n "$PIPELINE_COUNT" ] && [ "$PIPELINE_COUNT" -gt 0 ]; then
+            echo "Total Pipelines: $PIPELINE_COUNT"
+            echo ""
+            
+            # Extract pipeline IDs and basic info using grep
+            PIPELINE_IDS=()
+            PIPELINE_TYPES=()
+            PIPELINE_DESTINATIONS=()
+            
+            # Extract IDs
+            while IFS= read -r id; do
+                if [ -n "$id" ]; then
+                    PIPELINE_IDS+=("$id")
+                fi
+            done < <(echo "$RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract types
+            while IFS= read -r type; do
+                if [ -n "$type" ]; then
+                    PIPELINE_TYPES+=("$type")
+                fi
+            done < <(echo "$RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract destinations
+            while IFS= read -r dest; do
+                if [ -n "$dest" ]; then
+                    PIPELINE_DESTINATIONS+=("$dest")
+                fi
+            done < <(echo "$RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
+            
+            # Display pipeline information
+            for i in "${!PIPELINE_IDS[@]}"; do
+                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
+                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
+                    echo "   Type: ${PIPELINE_TYPES[$i]}"
+                fi
+                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
+                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
+                fi
+                echo ""
+            done
+            
+            # Ask if user wants to select a pipeline for configuration
+            echo ""
+            read -p "Do you want to select a pipeline for configuration? (y/n): " select_pipeline
+            if [[ "$select_pipeline" =~ ^[Yy]$ ]]; then
+                read -p "Enter pipeline number (1-${#PIPELINE_IDS[@]}): " pipeline_choice
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
+                    SELECTED_PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID: $SELECTED_PIPELINE_ID"
+                    
+                    # Ask if user wants to save this pipeline ID
+                    read -p "Do you want to save this pipeline ID to configuration? (y/n): " save_pipeline
+                    if [[ "$save_pipeline" =~ ^[Yy]$ ]]; then
+                        # Update config file with selected pipeline ID
+                        if [ -f "$CONFIG_FILE" ]; then
+                            # Remove existing pipeline ID if present
+                            grep -v "PIPELINE_ID" "$CONFIG_FILE" > temp_config
+                            mv temp_config "$CONFIG_FILE"
+                            # Add new pipeline ID
+                            echo "PIPELINE_ID=\"$SELECTED_PIPELINE_ID\"" >> "$CONFIG_FILE"
+                            print_status "Pipeline ID saved to configuration: $SELECTED_PIPELINE_ID"
+                        fi
+                    fi
+                else
+                    print_error "Invalid pipeline number selected"
+                fi
+            fi
+        fi
+    fi
 }
 
 # Function to configure WorkZone integration
@@ -519,6 +602,556 @@ configure_workzone_integration() {
     
     print_status "WorkZone integration configuration saved successfully!"
     print_status "You can now proceed to create the pipeline in the next step."
+}
+
+# Function to check grounding status
+check_grounding_status() {
+    print_header "Check Grounding Status"
+    
+    # Load configuration and get fresh token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Check if we have the required configuration
+    if [ -z "$DOC_GROUNDING_SERVICE_BINDING_URL" ] || [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        print_error "Missing required configuration. Please complete the setup steps first."
+        return 1
+    fi
+    
+    # Get fresh access token
+    print_status "Getting fresh access token for status check..."
+    if ! get_access_token; then
+        print_error "Failed to get access token. Cannot proceed with status check."
+        return 1
+    fi
+    
+    # Reload config to get the new token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Show status check menu
+    while true; do
+        echo ""
+        print_header "Grounding Status Check Options"
+        echo "1. Check Pipeline Status"
+        echo "2. Check Execution Status"
+        echo "3. Check Document Status"
+        echo "4. Check All Statuses"
+        echo "5. Back to Main Menu"
+        echo ""
+        
+        read -p "Select an option (1-5): " status_choice
+        
+        case $status_choice in
+            1)
+                check_pipeline_status
+                ;;
+            2)
+                check_execution_status
+                ;;
+            3)
+                check_document_status
+                ;;
+            4)
+                check_all_statuses
+                ;;
+            5)
+                return 0
+                ;;
+            *)
+                print_error "Invalid option. Please select 1-5."
+                ;;
+        esac
+        
+        echo ""
+        read -p "Press Enter to continue..."
+    done
+}
+
+# Function to check pipeline status
+check_pipeline_status() {
+    print_header "Pipeline Status Check"
+    
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
+            return 1
+        fi
+    fi
+    
+    print_status "Checking status for pipeline: $PIPELINE_ID"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/status" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Pipeline Status Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+        
+        # Extract and display status
+        STATUS=$(echo "$RESPONSE" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$STATUS" ]; then
+            echo ""
+            print_status "Current Pipeline Status: $STATUS"
+        fi
+    else
+        print_error "Failed to get pipeline status"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check execution status
+check_execution_status() {
+    print_header "Execution Status Check"
+    
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
+            return 1
+        fi
+    fi
+    
+    print_status "Checking executions for pipeline: $PIPELINE_ID"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Execution Status Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+        
+        # Extract execution count
+        EXECUTION_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
+        if [ -n "$EXECUTION_COUNT" ]; then
+            echo ""
+            print_status "Total Executions: $EXECUTION_COUNT"
+        fi
+        
+        # Ask if user wants to check specific execution
+        if [ "$EXECUTION_COUNT" -gt 0 ]; then
+            echo ""
+            read -p "Do you want to check a specific execution? (y/n): " check_specific
+            if [[ "$check_specific" =~ ^[Yy]$ ]]; then
+                get_input "Enter Execution ID" "" "EXECUTION_ID"
+                if [ -n "$EXECUTION_ID" ]; then
+                    check_specific_execution "$EXECUTION_ID"
+                fi
+            fi
+        fi
+    else
+        print_error "Failed to get execution status"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check specific execution
+check_specific_execution() {
+    local execution_id="$1"
+    
+    print_status "Checking specific execution: $execution_id"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions/$execution_id" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Specific Execution Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+    else
+        print_error "Failed to get specific execution status"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check document status
+check_document_status() {
+    print_header "Document Status Check"
+    
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
+            return 1
+        fi
+    fi
+    
+    echo ""
+    echo "Document Status Check Options:"
+    echo "1. Check all documents in pipeline"
+    echo "2. Check documents in specific execution"
+    echo "3. Check specific document"
+    echo ""
+    
+    read -p "Select option (1-3): " doc_choice
+    
+    case $doc_choice in
+        1)
+            check_pipeline_documents
+            ;;
+        2)
+            check_execution_documents
+            ;;
+        3)
+            check_specific_document
+            ;;
+        *)
+            print_error "Invalid option selected"
+            return 1
+            ;;
+    esac
+}
+
+# Function to check all documents in pipeline
+check_pipeline_documents() {
+    print_status "Checking all documents in pipeline: $PIPELINE_ID"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Pipeline Documents Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+        
+        # Extract document count
+        DOC_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
+        if [ -n "$DOC_COUNT" ]; then
+            echo ""
+            print_status "Total Documents: $DOC_COUNT"
+        fi
+    else
+        print_error "Failed to get pipeline documents"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check documents in specific execution
+check_execution_documents() {
+    if [ -z "$PIPELINE_ID" ]; then
+        print_error "Pipeline ID is required."
+        return 1
+    fi
+    
+    get_input "Enter Execution ID" "" "EXECUTION_ID"
+    if [ -z "$EXECUTION_ID" ]; then
+        print_error "Execution ID is required."
+        return 1
+    fi
+    
+    print_status "Checking documents in execution: $EXECUTION_ID"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions/$EXECUTION_ID/documents" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Execution Documents Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+        
+        # Extract document count
+        DOC_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
+        if [ -n "$DOC_COUNT" ]; then
+            echo ""
+            print_status "Total Documents in Execution: $DOC_COUNT"
+        fi
+    else
+        print_error "Failed to get execution documents"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check specific document
+check_specific_document() {
+    if [ -z "$PIPELINE_ID" ]; then
+        print_error "Pipeline ID is required."
+        return 1
+    fi
+    
+    get_input "Enter Document ID" "" "DOCUMENT_ID"
+    if [ -z "$DOCUMENT_ID" ]; then
+        print_error "Document ID is required."
+        return 1
+    fi
+    
+    print_status "Checking specific document: $DOCUMENT_ID"
+    
+    RESPONSE=$(curl -s \
+        --request GET \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents/$DOCUMENT_ID" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ $? -eq 0 ]; then
+        print_status "Specific Document Response:"
+        echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+    else
+        print_error "Failed to get specific document"
+        echo "Response: $RESPONSE"
+    fi
+}
+
+# Function to check all statuses
+check_all_statuses() {
+    print_header "Checking All Statuses"
+    
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
+            return 1
+        fi
+    fi
+    
+    echo ""
+    print_status "Checking all statuses for pipeline: $PIPELINE_ID"
+    echo ""
+    
+    # Check pipeline status
+    print_header "1. Pipeline Status"
+    check_pipeline_status
+    
+    echo ""
+    print_header "2. Execution Status"
+    check_execution_status
+    
+    echo ""
+    print_header "3. Document Status"
+    check_pipeline_documents
+    
+    echo ""
+    print_status "All status checks completed!"
+}
+
+# Function to delete pipeline
+delete_pipeline() {
+    print_header "Delete Pipeline"
+    
+    # Load configuration and get fresh token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Check if we have the required configuration
+    if [ -z "$DOC_GROUNDING_SERVICE_BINDING_URL" ] || [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        print_error "Missing required configuration. Please complete the setup steps first."
+        return 1
+    fi
+    
+    # Get fresh access token
+    print_status "Getting fresh access token for pipeline deletion..."
+    if ! get_access_token; then
+        print_error "Failed to get access token. Cannot proceed with pipeline deletion."
+        return 1
+    fi
+    
+    # Reload config to get the new token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Check if pipeline ID exists in config
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        echo ""
+        print_status "Fetching available pipelines for selection..."
+        
+        # Get pipeline list
+        PIPELINE_RESPONSE=$(curl -s \
+            --request GET \
+            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
+            --header 'accept: application/json' \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --cert "$CERT_FILE" \
+            --key "$KEY_FILE")
+        
+        if [[ "$PIPELINE_RESPONSE" != "[]" ]] && [[ "$PIPELINE_RESPONSE" != "null" ]]; then
+            echo ""
+            print_status "Available Pipelines:"
+            
+            # Extract pipeline information
+            PIPELINE_IDS=()
+            PIPELINE_TYPES=()
+            PIPELINE_DESTINATIONS=()
+            
+            # Extract IDs
+            while IFS= read -r id; do
+                if [ -n "$id" ]; then
+                    PIPELINE_IDS+=("$id")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract types
+            while IFS= read -r type; do
+                if [ -n "$type" ]; then
+                    PIPELINE_TYPES+=("$type")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract destinations
+            while IFS= read -r dest; do
+                if [ -n "$dest" ]; then
+                    PIPELINE_DESTINATIONS+=("$dest")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
+            
+            # Check if we found any pipelines
+            if [ ${#PIPELINE_IDS[@]} -eq 0 ]; then
+                print_error "No pipeline IDs found in response"
+                echo "Response: $PIPELINE_RESPONSE"
+                return 1
+            fi
+            
+            # Display pipeline information
+            for i in "${!PIPELINE_IDS[@]}"; do
+                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
+                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
+                    echo "   Type: ${PIPELINE_TYPES[$i]}"
+                fi
+                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
+                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
+                fi
+                echo ""
+            done
+            
+            # Let user select pipeline
+            read -p "Select pipeline to delete (1-${#PIPELINE_IDS[@]}): " pipeline_choice
+            if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
+                PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
+                print_status "Selected Pipeline ID for deletion: $PIPELINE_ID"
+            else
+                print_error "Invalid pipeline number selected"
+                return 1
+            fi
+        else
+            print_error "No pipelines found to delete"
+            return 1
+        fi
+    fi
+    
+    # Show pipeline information before deletion
+    print_status "Pipeline to be deleted: $PIPELINE_ID"
+    
+    # Ask for confirmation
+    echo ""
+    print_warning "WARNING: This action cannot be undone!"
+    echo "Pipeline ID: $PIPELINE_ID"
+    echo "Service URL: $DOC_GROUNDING_SERVICE_BINDING_URL"
+    echo ""
+    
+    read -p "Are you sure you want to delete this pipeline? (yes/no): " confirmation
+    
+    if [[ "$confirmation" != "yes" ]]; then
+        print_status "Pipeline deletion cancelled."
+        return 0
+    fi
+    
+    # Double confirmation
+    echo ""
+    print_warning "Final confirmation required!"
+    echo "Type 'DELETE' to confirm pipeline deletion:"
+    read -p "Confirmation: " final_confirmation
+    
+    if [[ "$final_confirmation" != "DELETE" ]]; then
+        print_status "Pipeline deletion cancelled."
+        return 0
+    fi
+    
+    print_status "Deleting pipeline: $PIPELINE_ID"
+    
+    # Delete the pipeline
+    RESPONSE=$(curl -s \
+        --request DELETE \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        --request DELETE \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID" \
+        --header 'Accept: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    if [ "$HTTP_STATUS" -eq 204 ] || [ "$HTTP_STATUS" -eq 200 ]; then
+        print_status "Pipeline deleted successfully!"
+        
+        # Remove pipeline information from config
+        if [ -f "$CONFIG_FILE" ]; then
+            # Create temporary config without pipeline info
+            grep -v "PIPELINE_ID\|AI_RESOURCE_GROUP\|GENERIC_SECRET_NAME" "$CONFIG_FILE" > temp_config
+            mv temp_config "$CONFIG_FILE"
+            
+            # Clear pipeline variables
+            unset PIPELINE_ID
+            unset AI_RESOURCE_GROUP
+            unset GENERIC_SECRET_NAME
+            
+            print_status "Pipeline configuration removed from config file."
+        fi
+        
+        # Save the updated configuration
+        save_config
+        print_status "Configuration updated and saved successfully"
+        
+    elif [ "$HTTP_STATUS" -eq 404 ]; then
+        print_warning "Pipeline not found (404). It may have been already deleted."
+        
+        # Remove pipeline information from config anyway
+        if [ -f "$CONFIG_FILE" ]; then
+            grep -v "PIPELINE_ID\|AI_RESOURCE_GROUP\|GENERIC_SECRET_NAME" "$CONFIG_FILE" > temp_config
+            mv temp_config "$CONFIG_FILE"
+            
+            # Clear pipeline variables
+            unset PIPELINE_ID
+            unset AI_RESOURCE_GROUP
+            unset GENERIC_SECRET_NAME
+            
+            print_status "Pipeline configuration removed from config file."
+            save_config
+        fi
+        
+    else
+        print_error "Failed to delete pipeline. HTTP Status: $HTTP_STATUS"
+        if [ -n "$RESPONSE" ]; then
+            echo "Response: $RESPONSE"
+        fi
+        return 1
+    fi
 }
 
 # Function to create WorkZone pipeline
@@ -669,9 +1302,11 @@ show_menu() {
     echo "5. Test Document Grounding Endpoints"
     echo "6. Configure WorkZone Integration"
     echo "7. Create WorkZone Pipeline"
-    echo "8. Show Configuration Summary"
-    echo "9. Load/Save Configuration"
-    echo "10. Exit"
+    echo "8. Check Grounding Status"
+    echo "9. Delete Pipeline"
+    echo "10. Show Configuration Summary"
+    echo "11. Load/Save Configuration"
+    echo "12. Exit"
     echo ""
 }
 
@@ -710,18 +1345,24 @@ main() {
                 create_pipeline
                 ;;
             8)
-                show_summary
+                check_grounding_status
                 ;;
             9)
+                delete_pipeline
+                ;;
+            10)
+                show_summary
+                ;;
+            11)
                 load_config
                 save_config
                 ;;
-            10)
+            12)
                 print_status "Exiting..."
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please select 1-10."
+                print_error "Invalid option. Please select 1-12."
                 ;;
         esac
         

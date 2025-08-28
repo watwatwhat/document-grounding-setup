@@ -53,10 +53,11 @@ chmod +x joule_document_grounding_setup.sh
 3. **Create Certificate Files** - 証明書ファイルの作成
 4. **Get Access Token** - アクセストークンの取得
 5. **Test Document Grounding Endpoints** - エンドポイントのテスト
-6. **Create WorkZone Pipeline** - WorkZoneパイプラインの作成
-7. **Show Configuration Summary** - 設定の概要表示
-8. **Load/Save Configuration** - 設定の読み込み/保存
-9. **Exit** - 終了
+6. **Configure WorkZone Integration** - WorkZone統合の設定
+7. **Create WorkZone Pipeline** - WorkZoneパイプラインの作成
+8. **Show Configuration Summary** - 設定の概要表示
+9. **Load/Save Configuration** - 設定の読み込み/保存
+10. **Exit** - 終了
 
 ### 設定ファイル
 
@@ -129,12 +130,34 @@ SAP BTP Cockpitで以下の手順を実行：
 
 取得したトークンを使用してDocument Groundingのエンドポイントをテストします。
 
-### 6. WorkZoneパイプラインの作成
+### 6. WorkZone統合の設定
+
+SAP Build Work ZoneとDocument Groundingの統合を設定します。以下の手順が必要です：
+
+#### Step 1: WorkZone Admin ConsoleでのOAuth Client作成
+1. Admin Console > External Integrations > OAuth Clientsに移動
+2. "Add OAuth Client"をクリック
+3. 名前: "Document Grounding OAuth Client"（または任意の意味のある名前）
+4. Integration URL: "https://www.yoururl.com"（任意の有効なURL形式）
+5. 作成後、KeyとSecretの値を記録
+
+#### Step 2: Document Grounding機能の有効化
+1. Admin Console > Feature Enablement > Featuresに移動
+2. Feature Managementセクションで"Enable document grounding integration"を有効化
+3. Step 1で作成したOAuth clientを選択
+4. 変更を保存
+
+#### Step 3: BTP CockpitでのDestination作成
+1. Connectivity > Destinationsに移動
+2. 新しいdestinationを作成（詳細はスクリプト内で表示）
+3. 追加プロパティの設定
+
+### 7. WorkZoneパイプラインの作成
 
 SAP AI CoreのWorkZoneパイプラインを作成します。以下の情報が必要です：
 
 - **AI Resource Group**: アカウントに割り当てられたAIリソースグループ
-- **Generic Secret Name**: WorkZone用に作成された汎用シークレットの名前
+- **Generic Secret Name**: Step 6で設定したDestination名が自動的に使用される
 
 パイプライン作成後、パイプラインIDが自動的に設定ファイルに保存されます。
 

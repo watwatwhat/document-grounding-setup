@@ -470,9 +470,60 @@ test_endpoints() {
     fi
 }
 
+# Function to configure WorkZone integration
+configure_workzone_integration() {
+    print_header "Step 22: Configuring WorkZone Integration"
+    
+    print_status "This step configures the integration between SAP Build Work Zone and Document Grounding."
+    print_status "You will need to complete several steps in SAP BTP Cockpit and WorkZone Admin Console."
+    echo ""
+    
+    print_status "Step 1: Create OAuth Client in WorkZone Admin Console"
+    echo "1. Go to Admin Console > External Integrations > OAuth Clients"
+    echo "2. Click 'Add OAuth Client'"
+    echo "3. Name: 'Document Grounding OAuth Client' (or any meaningful name)"
+    echo "4. Integration URL: 'https://www.yoururl.com' (any valid URL format)"
+    echo "5. Click 'Create' and note down the Key and Secret values"
+    echo ""
+    
+    print_status "Step 2: Enable Document Grounding Feature"
+    echo "1. Go to Admin Console > Feature Enablement > Features"
+    echo "2. In Feature Management section, enable 'Enable document grounding integration'"
+    echo "3. Select the OAuth client created in Step 1"
+    echo "4. Save changes"
+    echo ""
+    
+    print_status "Step 3: Create Destination in BTP Cockpit"
+    echo "1. Go to Connectivity > Destinations"
+    echo "2. Create new destination with the following details:"
+    echo "   - URL: Your DWS URL (from Admin Console Overview screen)"
+    echo "   - Proxy Type: Internet"
+    echo "   - Authentication: OAuth2ClientCredentials"
+    echo "   - Client ID: OAuth client Key from Step 1"
+    echo "   - Client Secret: OAuth client Secret from Step 1"
+    echo "   - Token Service URL Type: Dedicated"
+    echo "   - Token Service URL: Your DWS URL/api/v1/auth/token"
+    echo "3. Add Additional Properties:"
+    echo "   - HTML5.DynamicDestination: true"
+    echo "   - SetXForwardedHeaders: false"
+    echo "   - HTML5.SetXForwardedHeaders: false"
+    echo ""
+    
+    print_status "Now let's collect the required information:"
+    
+    # Get destination name only
+    get_input "Destination Name (e.g., WorkZone-DocumentGrounding)" "" "DESTINATION_NAME"
+    
+    # Save configuration
+    echo "DESTINATION_NAME=\"$DESTINATION_NAME\"" >> "$CONFIG_FILE"
+    
+    print_status "WorkZone integration configuration saved successfully!"
+    print_status "You can now proceed to create the pipeline in the next step."
+}
+
 # Function to create WorkZone pipeline
 create_pipeline() {
-    print_header "Step 22: Creating WorkZone Pipeline"
+    print_header "Step 23: Creating WorkZone Pipeline"
     
     # Load the access token
     if [ -f "$CONFIG_FILE" ]; then
@@ -487,9 +538,18 @@ create_pipeline() {
     print_status "Creating WorkZone pipeline for document grounding..."
     print_status "Based on SAP AI Core WorkZone pipeline creation"
     
-    # Get required parameters
-    get_input "AI Resource Group" "" "AI_RESOURCE_GROUP"
-    get_input "Generic Secret Name (destination)" "" "GENERIC_SECRET_NAME"
+    # Load WorkZone configuration if available
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Use saved destination name if available, otherwise ask for it
+    if [ -n "$DESTINATION_NAME" ]; then
+        print_status "Using saved destination name: $DESTINATION_NAME"
+        GENERIC_SECRET_NAME="$DESTINATION_NAME"
+    else
+        get_input "Generic Secret Name (destination)" "" "GENERIC_SECRET_NAME"
+    fi
     
     # Create pipeline configuration
     PIPELINE_CONFIG="{
@@ -499,20 +559,32 @@ create_pipeline() {
         }
     }"
     
-    print_status "Pipeline configuration: $PIPELINE_CONFIG"
-    
-    # Create pipeline using the document grounding endpoint
+
+    echo "==== Request Details ===="
+    echo "  Endpoint: $DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline"
+    echo "  AI-Resource-Group: default"
+    echo "  accept: application/json"
+    echo "  content-type: application/json"
+    echo "  Authorization: Bearer [REDACTED]"
+    echo "  Certificate file: $CERT_FILE"
+    echo "  Key file: $KEY_FILE"
+    echo "  Request body:"
+    echo "  $PIPELINE_CONFIG"
+    echo "======================="
+
+    # パイプライン作成リクエストを送信
     RESPONSE=$(curl -s \
         --request POST \
         --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
+        --header "AI-Resource-Group: default" \
         --header 'accept: application/json' \
         --header 'content-type: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --data "$PIPELINE_CONFIG" \
         --cert "$CERT_FILE" \
         --key "$KEY_FILE")
-    
-    print_status "Response received:"
+
+    print_status "レスポンスを受信しました:"
     echo "$RESPONSE"
     
     # Extract pipeline ID if successful
@@ -521,7 +593,7 @@ create_pipeline() {
         print_status "Pipeline created successfully with ID: $PIPELINE_ID"
         # Save pipeline configuration to config
         echo "AI_RESOURCE_GROUP=\"$AI_RESOURCE_GROUP\"" >> "$CONFIG_FILE"
-        echo "GENERIC_SECRET_NAME=\"$GENERIC_SECRET_NAME" >> "$CONFIG_FILE"
+        echo "GENERIC_SECRET_NAME=\"$GENERIC_SECRET_NAME\"" >> "$CONFIG_FILE"
         echo "PIPELINE_ID=\"$PIPELINE_ID\"" >> "$CONFIG_FILE"
     else
         print_warning "Pipeline ID not found in response"
@@ -546,9 +618,18 @@ show_summary() {
     echo "  Key: $KEY_FILE"
     echo ""
     
-    # Load pipeline information if available
+    # Load pipeline and WorkZone integration information if available
     if [ -f "$CONFIG_FILE" ]; then
         source "$CONFIG_FILE"
+        
+        # WorkZone Integration Information
+        if [ -n "$DESTINATION_NAME" ]; then
+            echo "WorkZone Integration:"
+            echo "  Destination Name: $DESTINATION_NAME"
+            echo ""
+        fi
+        
+        # Pipeline Information
         if [ -n "$PIPELINE_ID" ]; then
             echo "Pipeline Information:"
             echo "  Pipeline ID: $PIPELINE_ID"
@@ -575,10 +656,11 @@ show_menu() {
     echo "3. Create Certificate Files"
     echo "4. Get Access Token"
     echo "5. Test Document Grounding Endpoints"
-    echo "6. Create WorkZone Pipeline"
-    echo "7. Show Configuration Summary"
-    echo "8. Load/Save Configuration"
-    echo "9. Exit"
+    echo "6. Configure WorkZone Integration"
+    echo "7. Create WorkZone Pipeline"
+    echo "8. Show Configuration Summary"
+    echo "9. Load/Save Configuration"
+    echo "10. Exit"
     echo ""
 }
 
@@ -589,7 +671,7 @@ main() {
     
     while true; do
         show_menu
-        read -p "Select an option (1-8): " choice
+        read -p "Select an option (1-10): " choice
         
         case $choice in
             1)
@@ -611,21 +693,24 @@ main() {
                 test_endpoints
                 ;;
             6)
-                create_pipeline
+                configure_workzone_integration
                 ;;
             7)
-                show_summary
+                create_pipeline
                 ;;
             8)
+                show_summary
+                ;;
+            9)
                 load_config
                 save_config
                 ;;
-            9)
+            10)
                 print_status "Exiting..."
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please select 1-9."
+                print_error "Invalid option. Please select 1-10."
                 ;;
         esac
         

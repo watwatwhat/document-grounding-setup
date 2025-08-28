@@ -1092,6 +1092,206 @@ check_all_statuses() {
     print_status "All status checks completed!"
 }
 
+# Function to trigger pipeline
+trigger_pipeline() {
+    print_header "Trigger Pipeline"
+    
+    # Load configuration and get fresh token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Check if we have the required configuration
+    if [ -z "$DOC_GROUNDING_SERVICE_BINDING_URL" ] || [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        print_error "Missing required configuration. Please complete the setup steps first."
+        return 1
+    fi
+    
+    # Get fresh access token
+    print_status "Getting fresh access token for pipeline trigger..."
+    if ! get_access_token; then
+        print_error "Failed to get access token. Cannot proceed with pipeline trigger."
+        return 1
+    fi
+    
+    # Reload config to get the new token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    # Check if pipeline ID exists in config
+    if [ -z "$PIPELINE_ID" ]; then
+        print_warning "No pipeline ID found in configuration."
+        echo ""
+        print_status "Fetching available pipelines for selection..."
+        
+        # Get pipeline list
+        PIPELINE_RESPONSE=$(curl -s \
+            --request GET \
+            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --cert "$CERT_FILE" \
+            --key "$KEY_FILE")
+        
+        if [[ "$PIPELINE_RESPONSE" != "[]" ]] && [[ "$PIPELINE_RESPONSE" != "null" ]]; then
+            echo ""
+            print_status "Available Pipelines:"
+            
+            # Extract pipeline information
+            PIPELINE_IDS=()
+            PIPELINE_TYPES=()
+            PIPELINE_DESTINATIONS=()
+            
+            # Extract IDs
+            while IFS= read -r id; do
+                if [ -n "$id" ]; then
+                    PIPELINE_IDS+=("$id")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract types
+            while IFS= read -r type; do
+                if [ -n "$type" ]; then
+                    PIPELINE_TYPES+=("$type")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
+            
+            # Extract destinations
+            while IFS= read -r dest; do
+                if [ -n "$dest" ]; then
+                    PIPELINE_DESTINATIONS+=("$dest")
+                fi
+            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
+            
+            # Check if we found any pipelines
+            if [ ${#PIPELINE_IDS[@]} -eq 0 ]; then
+                print_error "No pipeline IDs found in response"
+                echo "Response: $PIPELINE_RESPONSE"
+                return 1
+            fi
+            
+            # Display pipeline information
+            for i in "${!PIPELINE_IDS[@]}"; do
+                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
+                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
+                    echo "   Type: ${PIPELINE_TYPES[$i]}"
+                fi
+                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
+                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
+                fi
+                echo ""
+            done
+            
+            # Let user select pipeline
+            read -p "Select pipeline to trigger (1-${#PIPELINE_IDS[@]}): " pipeline_choice
+            if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
+                PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
+                print_status "Selected Pipeline ID for trigger: $PIPELINE_ID"
+            else
+                print_error "Invalid pipeline number selected"
+                return 1
+            fi
+        else
+            print_error "No pipelines found to trigger"
+            return 1
+        fi
+    fi
+    
+    # Show pipeline information before trigger
+    print_status "Pipeline to be triggered: $PIPELINE_ID"
+    
+    # Ask for confirmation
+    echo ""
+    print_warning "WARNING: This will start the content update process for the pipeline!"
+    echo "Pipeline ID: $PIPELINE_ID"
+    echo "Service URL: $DOC_GROUNDING_SERVICE_BINDING_URL"
+    echo ""
+    print_status "Note: This endpoint supports 5 calls in 1 minute per tenant."
+    echo ""
+    
+    read -p "Are you sure you want to trigger this pipeline? (yes/no): " confirmation
+    
+    if [[ "$confirmation" != "yes" ]]; then
+        print_status "Pipeline trigger cancelled."
+        return 0
+    fi
+    
+    print_status "Triggering pipeline: $PIPELINE_ID"
+    
+    # Create trigger request body
+    TRIGGER_REQUEST="{
+        \"pipelineId\": \"$PIPELINE_ID\"
+    }"
+    
+    echo "==== Trigger Request Details ===="
+    echo "  Endpoint: $DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/trigger"
+    echo "  Accept: application/json"
+    echo "  Content-Type: application/json"
+    echo "  Authorization: Bearer $ACCESS_TOKEN"
+    echo "  Certificate file: $CERT_FILE"
+    echo "  Key file: $KEY_FILE"
+    echo "  Request body:"
+    echo "  $TRIGGER_REQUEST"
+    echo "================================"
+    
+    # Send trigger request
+    RESPONSE=$(curl -s \
+        --request POST \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/trigger" \
+        --header 'Accept: application/json' \
+        --header 'Content-Type: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --data "$TRIGGER_REQUEST" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        --request POST \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/trigger" \
+        --header 'Accept: application/json' \
+        --header 'Content-Type: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --data "$TRIGGER_REQUEST" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    print_status "Trigger Response:"
+    echo "$RESPONSE"
+    
+    if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 202 ]; then
+        print_status "Pipeline triggered successfully!"
+        print_status "HTTP Status: $HTTP_STATUS"
+        
+        # Update pipeline status in pipelines.json if available
+        if [ -f "$PIPELINES_FILE" ]; then
+            # Add trigger timestamp to pipeline data
+            if command -v jq &> /dev/null; then
+                # Use jq to add trigger timestamp
+                jq --arg id "$PIPELINE_ID" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                   '.[$id].lastTriggered = $timestamp' "$PIPELINES_FILE" > temp_pipelines.json && \
+                mv temp_pipelines.json "$PIPELINES_FILE"
+                print_status "Pipeline trigger timestamp updated in $PIPELINES_FILE"
+            else
+                # Simple text replacement
+                print_status "Pipeline trigger completed. Consider updating $PIPELINES_FILE manually."
+            fi
+        fi
+        
+    elif [ "$HTTP_STATUS" -eq 429 ]; then
+        print_error "Too many requests. Rate limit exceeded (5 calls per minute per tenant)."
+        print_status "Please wait before trying again."
+    elif [ "$HTTP_STATUS" -eq 404 ]; then
+        print_error "Pipeline not found (404). Please check the pipeline ID."
+    else
+        print_error "Failed to trigger pipeline. HTTP Status: $HTTP_STATUS"
+        if [ -n "$RESPONSE" ]; then
+            echo "Response: $RESPONSE"
+        fi
+        return 1
+    fi
+}
+
 # Function to delete pipeline
 delete_pipeline() {
     print_header "Delete Pipeline"
@@ -1518,9 +1718,10 @@ show_menu() {
     echo "7. Create WorkZone Pipeline"
     echo "8. Check Grounding Status"
     echo "9. Delete Pipeline"
-    echo "10. Show Configuration Summary"
-    echo "11. Load/Save Configuration"
-    echo "12. Exit"
+    echo "10. Trigger Pipeline"
+    echo "11. Show Configuration Summary"
+    echo "12. Load/Save Configuration"
+    echo "13. Exit"
     echo ""
 }
 
@@ -1568,18 +1769,21 @@ main() {
                 delete_pipeline
                 ;;
             10)
-                show_summary
+                trigger_pipeline
                 ;;
             11)
+                show_summary
+                ;;
+            12)
                 load_config
                 save_config
                 ;;
-            12)
+            13)
                 print_status "Exiting..."
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please select 1-12."
+                print_error "Invalid option. Please select 1-13."
                 ;;
         esac
         

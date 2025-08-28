@@ -1,0 +1,20 @@
+# SAP Joule Document Grounding Configuration Template
+# Copy this file to joule_config.properties and fill in your values
+
+# Document Grounding Instance
+DOC_GROUNDING_INSTANCE_NAME=""
+DOC_GROUNDING_SERVICE_BINDING_NAME=""
+DOC_GROUNDING_SERVICE_BINDING_URL=""
+
+# Cloud Identity Services Instance
+CLOUD_IDENTITY_INSTANCE_NAME=""
+CLOUD_IDENTITY_SERVICE_BINDING_NAME=""
+
+# Authentication Details
+CLIENT_ID=""
+AUTHORIZATION_ENDPOINT=""
+TOKEN_ENDPOINT=""
+
+# Certificate Files
+CERT_FILE="doc-grounding.crt"
+KEY_FILE="doc-grounding.key"

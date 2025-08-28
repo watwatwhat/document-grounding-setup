@@ -1,0 +1,63 @@
+# SAP Joule Document Grounding Setup - .gitignore
+
+# Configuration files (may contain sensitive information)
+joule_config.properties
+*.properties
+
+# Certificate and key files (security sensitive)
+*.crt
+*.cer
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated files
+credentials_adjusted/*.crt
+credentials_adjusted/*.cer
+credentials_adjusted/*.pem
+credentials_adjusted/*.key
+credentials_adjusted/*.p12
+credentials_adjusted/*.pfx
+
+# Temporary files
+temp.*
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+
+# Access tokens and sensitive data
+*access_token*
+*token*
+
+# Backup files
+*.orig
+*.rej
+
+# Shell script backups
+*.sh~
+
+# Keep template files
+!template/*.template
+!credentials_adjusted/.gitkeep

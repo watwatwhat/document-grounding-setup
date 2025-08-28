@@ -53,9 +53,10 @@ chmod +x joule_document_grounding_setup.sh
 3. **Create Certificate Files** - 証明書ファイルの作成
 4. **Get Access Token** - アクセストークンの取得
 5. **Test Document Grounding Endpoints** - エンドポイントのテスト
-6. **Show Configuration Summary** - 設定の概要表示
-7. **Load/Save Configuration** - 設定の読み込み/保存
-8. **Exit** - 終了
+6. **Create WorkZone Pipeline** - WorkZoneパイプラインの作成
+7. **Show Configuration Summary** - 設定の概要表示
+8. **Load/Save Configuration** - 設定の読み込み/保存
+9. **Exit** - 終了
 
 ### 設定ファイル
 
@@ -127,6 +128,15 @@ SAP BTP Cockpitで以下の手順を実行：
 ### 5. エンドポイントのテスト
 
 取得したトークンを使用してDocument Groundingのエンドポイントをテストします。
+
+### 6. WorkZoneパイプラインの作成
+
+SAP AI CoreのWorkZoneパイプラインを作成します。以下の情報が必要です：
+
+- **AI Resource Group**: アカウントに割り当てられたAIリソースグループ
+- **Generic Secret Name**: WorkZone用に作成された汎用シークレットの名前
+
+パイプライン作成後、パイプラインIDが自動的に設定ファイルに保存されます。
 
 ## セキュリティに関する注意事項
 

@@ -470,6 +470,64 @@ test_endpoints() {
     fi
 }
 
+# Function to create WorkZone pipeline
+create_pipeline() {
+    print_header "Step 22: Creating WorkZone Pipeline"
+    
+    # Load the access token
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    if [ -z "$ACCESS_TOKEN" ]; then
+        print_error "Access token not found. Please run the token generation step first."
+        return 1
+    fi
+    
+    print_status "Creating WorkZone pipeline for document grounding..."
+    print_status "Based on SAP AI Core WorkZone pipeline creation"
+    
+    # Get required parameters
+    get_input "AI Resource Group" "" "AI_RESOURCE_GROUP"
+    get_input "Generic Secret Name (destination)" "" "GENERIC_SECRET_NAME"
+    
+    # Create pipeline configuration
+    PIPELINE_CONFIG="{
+        \"type\": \"WorkZone\",
+        \"metadata\": {
+            \"destination\": \"$GENERIC_SECRET_NAME\"
+        }
+    }"
+    
+    print_status "Pipeline configuration: $PIPELINE_CONFIG"
+    
+    # Create pipeline using the document grounding endpoint
+    RESPONSE=$(curl -s \
+        --request POST \
+        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
+        --header 'accept: application/json' \
+        --header 'content-type: application/json' \
+        --header "Authorization: Bearer $ACCESS_TOKEN" \
+        --data "$PIPELINE_CONFIG" \
+        --cert "$CERT_FILE" \
+        --key "$KEY_FILE")
+    
+    print_status "Response received:"
+    echo "$RESPONSE"
+    
+    # Extract pipeline ID if successful
+    PIPELINE_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$PIPELINE_ID" ]; then
+        print_status "Pipeline created successfully with ID: $PIPELINE_ID"
+        # Save pipeline configuration to config
+        echo "AI_RESOURCE_GROUP=\"$AI_RESOURCE_GROUP\"" >> "$CONFIG_FILE"
+        echo "GENERIC_SECRET_NAME=\"$GENERIC_SECRET_NAME" >> "$CONFIG_FILE"
+        echo "PIPELINE_ID=\"$PIPELINE_ID\"" >> "$CONFIG_FILE"
+    else
+        print_warning "Pipeline ID not found in response"
+    fi
+}
+
 # Function to display configuration summary
 show_summary() {
     print_header "Configuration Summary"
@@ -487,6 +545,23 @@ show_summary() {
     echo "  Certificate: $CERT_FILE"
     echo "  Key: $KEY_FILE"
     echo ""
+    
+    # Load pipeline information if available
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+        if [ -n "$PIPELINE_ID" ]; then
+            echo "Pipeline Information:"
+            echo "  Pipeline ID: $PIPELINE_ID"
+            if [ -n "$AI_RESOURCE_GROUP" ]; then
+                echo "  AI Resource Group: $AI_RESOURCE_GROUP"
+            fi
+            if [ -n "$GENERIC_SECRET_NAME" ]; then
+                echo "  Generic Secret Name: $GENERIC_SECRET_NAME"
+            fi
+        fi
+    fi
+    
+    echo ""
     echo "Configuration saved to: $CONFIG_FILE"
 }
 
@@ -500,9 +575,10 @@ show_menu() {
     echo "3. Create Certificate Files"
     echo "4. Get Access Token"
     echo "5. Test Document Grounding Endpoints"
-    echo "6. Show Configuration Summary"
-    echo "7. Load/Save Configuration"
-    echo "8. Exit"
+    echo "6. Create WorkZone Pipeline"
+    echo "7. Show Configuration Summary"
+    echo "8. Load/Save Configuration"
+    echo "9. Exit"
     echo ""
 }
 
@@ -535,18 +611,21 @@ main() {
                 test_endpoints
                 ;;
             6)
-                show_summary
+                create_pipeline
                 ;;
             7)
+                show_summary
+                ;;
+            8)
                 load_config
                 save_config
                 ;;
-            8)
+            9)
                 print_status "Exiting..."
                 exit 0
                 ;;
             *)
-                print_error "Invalid option. Please select 1-8."
+                print_error "Invalid option. Please select 1-9."
                 ;;
         esac
         

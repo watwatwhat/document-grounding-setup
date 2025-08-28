@@ -839,7 +839,38 @@ check_pipeline_status() {
     
     if [ -z "$PIPELINE_ID" ]; then
         print_warning "No pipeline ID found in configuration."
-        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
+            
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
+                echo ""
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
+            else
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+            fi
+        else
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        fi
+        
         if [ -z "$PIPELINE_ID" ]; then
             print_error "Pipeline ID is required."
             return 1
@@ -878,7 +909,38 @@ check_execution_status() {
     
     if [ -z "$PIPELINE_ID" ]; then
         print_warning "No pipeline ID found in configuration."
-        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
+            
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
+                echo ""
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
+            else
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+            fi
+        else
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        fi
+        
         if [ -z "$PIPELINE_ID" ]; then
             print_error "Pipeline ID is required."
             return 1
@@ -953,8 +1015,39 @@ check_document_status() {
     print_header "Document Status Check"
     
     if [ -z "$PIPELINE_ID" ]; then
-        print_warning "No pipeline ID found in configuration."
-        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        print_warning "No pipeline ID selected."
+        
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
+            
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
+                echo ""
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
+            else
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+            fi
+        else
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        fi
+        
         if [ -z "$PIPELINE_ID" ]; then
             print_error "Pipeline ID is required."
             return 1
@@ -1091,8 +1184,39 @@ check_all_statuses() {
     print_header "Checking All Statuses"
     
     if [ -z "$PIPELINE_ID" ]; then
-        print_warning "No pipeline ID found in configuration."
-        get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        print_warning "No pipeline ID selected."
+        
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
+            
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
+                echo ""
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
+            else
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+            fi
+        else
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to check" "" "PIPELINE_ID"
+        fi
+        
         if [ -z "$PIPELINE_ID" ]; then
             print_error "Pipeline ID is required."
             return 1
@@ -1146,81 +1270,43 @@ trigger_pipeline() {
         source "$CONFIG_FILE"
     fi
     
-    # Check if pipeline ID exists in config
+    # Check if pipeline ID is selected
     if [ -z "$PIPELINE_ID" ]; then
-        print_warning "No pipeline ID found in configuration."
-        echo ""
-        print_status "Fetching available pipelines for selection..."
+        print_warning "No pipeline ID selected."
         
-        # Get pipeline list
-        PIPELINE_RESPONSE=$(curl -s \
-            --request GET \
-            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
-            --header 'Accept: application/json' \
-            --header "Authorization: Bearer $ACCESS_TOKEN" \
-            --cert "$CERT_FILE" \
-            --key "$KEY_FILE")
-        
-        if [[ "$PIPELINE_RESPONSE" != "[]" ]] && [[ "$PIPELINE_RESPONSE" != "null" ]]; then
-            echo ""
-            print_status "Available Pipelines:"
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
             
-            # Extract pipeline information
-            PIPELINE_IDS=()
-            PIPELINE_TYPES=()
-            PIPELINE_DESTINATIONS=()
-            
-            # Extract IDs
-            while IFS= read -r id; do
-                if [ -n "$id" ]; then
-                    PIPELINE_IDS+=("$id")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract types
-            while IFS= read -r type; do
-                if [ -n "$type" ]; then
-                    PIPELINE_TYPES+=("$type")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract destinations
-            while IFS= read -r dest; do
-                if [ -n "$dest" ]; then
-                    PIPELINE_DESTINATIONS+=("$dest")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
-            
-            # Check if we found any pipelines
-            if [ ${#PIPELINE_IDS[@]} -eq 0 ]; then
-                print_error "No pipeline IDs found in response"
-                echo "Response: $PIPELINE_RESPONSE"
-                return 1
-            fi
-            
-            # Display pipeline information
-            for i in "${!PIPELINE_IDS[@]}"; do
-                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
-                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
-                    echo "   Type: ${PIPELINE_TYPES[$i]}"
-                fi
-                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
-                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
-                fi
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
                 echo ""
-            done
-            
-            # Let user select pipeline
-            read -p "Select pipeline to trigger (1-${#PIPELINE_IDS[@]}): " pipeline_choice
-            if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
-                PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
-                print_status "Selected Pipeline ID for trigger: $PIPELINE_ID"
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID for trigger: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
             else
-                print_error "Invalid pipeline number selected"
-                return 1
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to trigger" "" "PIPELINE_ID"
             fi
         else
-            print_error "No pipelines found to trigger"
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to trigger" "" "PIPELINE_ID"
+        fi
+        
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
             return 1
         fi
     fi
@@ -1346,84 +1432,47 @@ delete_pipeline() {
         source "$CONFIG_FILE"
     fi
     
-    # Check if pipeline ID exists in config
+    # Check if pipeline ID is selected
     if [ -z "$PIPELINE_ID" ]; then
-        print_warning "No pipeline ID found in configuration."
-        echo ""
-        print_status "Fetching available pipelines for selection..."
+        print_warning "No pipeline ID selected."
         
-        # Get pipeline list
-        PIPELINE_RESPONSE=$(curl -s \
-            --request GET \
-            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
-            --header 'accept: application/json' \
-            --header "Authorization: Bearer $ACCESS_TOKEN" \
-            --cert "$CERT_FILE" \
-            --key "$KEY_FILE")
-        
-        if [[ "$PIPELINE_RESPONSE" != "[]" ]] && [[ "$PIPELINE_RESPONSE" != "null" ]]; then
-            echo ""
-            print_status "Available Pipelines:"
+        # Try to get pipeline ID from pipelines.json
+        if [ -f "$PIPELINES_FILE" ]; then
+            print_status "Checking $PIPELINES_FILE for available pipelines..."
             
-            # Extract pipeline information
-            PIPELINE_IDS=()
-            PIPELINE_TYPES=()
-            PIPELINE_DESTINATIONS=()
-            
-            # Extract IDs
-            while IFS= read -r id; do
-                if [ -n "$id" ]; then
-                    PIPELINE_IDS+=("$id")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract types
-            while IFS= read -r type; do
-                if [ -n "$type" ]; then
-                    PIPELINE_TYPES+=("$type")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract destinations
-            while IFS= read -r dest; do
-                if [ -n "$dest" ]; then
-                    PIPELINE_DESTINATIONS+=("$dest")
-                fi
-            done < <(echo "$PIPELINE_RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
-            
-            # Check if we found any pipelines
-            if [ ${#PIPELINE_IDS[@]} -eq 0 ]; then
-                print_error "No pipeline IDs found in response"
-                echo "Response: $PIPELINE_RESPONSE"
-                return 1
-            fi
-            
-            # Display pipeline information
-            for i in "${!PIPELINE_IDS[@]}"; do
-                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
-                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
-                    echo "   Type: ${PIPELINE_TYPES[$i]}"
-                fi
-                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
-                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
-                fi
+            # List available pipelines
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
                 echo ""
-            done
-            
-            # Let user select pipeline
-            read -p "Select pipeline to delete (1-${#PIPELINE_IDS[@]}): " pipeline_choice
-            if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
-                PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
-                print_status "Selected Pipeline ID for deletion: $PIPELINE_ID"
+                print_status "Available pipelines in $PIPELINES_FILE:"
+                for i in "${!AVAILABLE_PIPELINES[@]}"; do
+                    echo "$((i+1)). ${AVAILABLE_PIPELINES[$i]}"
+                done
+                echo ""
+                
+                read -p "Select pipeline number (1-${#AVAILABLE_PIPELINES[@]}) or enter custom Pipeline ID: " pipeline_choice
+                
+                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#AVAILABLE_PIPELINES[@]} ]; then
+                    PIPELINE_ID="${AVAILABLE_PIPELINES[$((pipeline_choice-1))]}"
+                    print_status "Selected Pipeline ID for deletion: $PIPELINE_ID"
+                else
+                    PIPELINE_ID="$pipeline_choice"
+                fi
             else
-                print_error "Invalid pipeline number selected"
-                return 1
+                print_warning "No pipelines found in $PIPELINES_FILE"
+                get_input "Enter Pipeline ID to delete" "" "PIPELINE_ID"
             fi
         else
-            print_error "No pipelines found to delete"
+            print_warning "$PIPELINES_FILE not found"
+            get_input "Enter Pipeline ID to delete" "" "PIPELINE_ID"
+        fi
+        
+        if [ -z "$PIPELINE_ID" ]; then
+            print_error "Pipeline ID is required."
             return 1
         fi
     fi
+
     
     # Show pipeline information before deletion
     print_status "Pipeline to be deleted: $PIPELINE_ID"
@@ -1480,19 +1529,8 @@ delete_pipeline() {
             print_status "Pipeline removed from $PIPELINES_FILE"
         fi
         
-        # Remove pipeline information from config
-        if [ -f "$CONFIG_FILE" ]; then
-            # Create temporary config without pipeline info
-            grep -v "PIPELINE_ID\|AI_RESOURCE_GROUP\|GENERIC_SECRET_NAME" "$CONFIG_FILE" > temp_config
-            mv temp_config "$CONFIG_FILE"
-            
-            # Clear pipeline variables
-            unset PIPELINE_ID
-            unset AI_RESOURCE_GROUP
-            unset GENERIC_SECRET_NAME
-            
-            print_status "Pipeline configuration removed from config file."
-        fi
+        # Pipeline information is now managed in pipelines.json
+        print_status "Pipeline information is managed in $PIPELINES_FILE"
         
         # Save the updated configuration
         save_config
@@ -1506,19 +1544,8 @@ delete_pipeline() {
             print_status "Pipeline removed from $PIPELINES_FILE"
         fi
         
-        # Remove pipeline information from config anyway
-        if [ -f "$CONFIG_FILE" ]; then
-            grep -v "PIPELINE_ID\|AI_RESOURCE_GROUP\|GENERIC_SECRET_NAME" "$CONFIG_FILE" > temp_config
-            mv temp_config "$CONFIG_FILE"
-            
-            # Clear pipeline variables
-            unset PIPELINE_ID
-            unset AI_RESOURCE_GROUP
-            unset GENERIC_SECRET_NAME
-            
-            print_status "Pipeline configuration removed from config file."
-            save_config
-        fi
+        # Pipeline information is now managed in pipelines.json
+        print_status "Pipeline information is managed in $PIPELINES_FILE"
         
     else
         print_error "Failed to delete pipeline. HTTP Status: $HTTP_STATUS"
@@ -1668,9 +1695,8 @@ create_pipeline() {
             print_warning "Failed to save pipeline to $PIPELINES_FILE"
         fi
         
-        # Save the updated configuration
-        save_config
-        print_status "Configuration updated and saved successfully"
+        # Pipeline information is now managed in pipelines.json
+        print_status "Pipeline information saved to $PIPELINES_FILE"
     else
         print_warning "Pipeline ID not found in response"
         echo "Response: $RESPONSE"
@@ -1708,14 +1734,17 @@ show_summary() {
         fi
         
         # Pipeline Information
-        if [ -n "$PIPELINE_ID" ]; then
+        if [ -f "$PIPELINES_FILE" ]; then
             echo "Pipeline Information:"
-            echo "  Pipeline ID: $PIPELINE_ID"
-            if [ -n "$AI_RESOURCE_GROUP" ]; then
-                echo "  AI Resource Group: $AI_RESOURCE_GROUP"
-            fi
-            if [ -n "$GENERIC_SECRET_NAME" ]; then
-                echo "  Generic Secret Name: $GENERIC_SECRET_NAME"
+            echo "  Pipelines file: $PIPELINES_FILE"
+            AVAILABLE_PIPELINES=($(list_pipelines))
+            if [ ${#AVAILABLE_PIPELINES[@]} -gt 0 ]; then
+                echo "  Available pipelines: ${#AVAILABLE_PIPELINES[@]}"
+                for pipeline_id in "${AVAILABLE_PIPELINES[@]}"; do
+                    echo "    - $pipeline_id"
+                done
+            else
+                echo "  No pipelines available"
             fi
         fi
     fi

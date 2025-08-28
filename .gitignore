@@ -4,7 +4,7 @@
 joule_config.properties
 *.properties
 pipelines.json
-tmp_pipelines.json
+temp_pipelines.json
 
 # Certificate and key files (security sensitive)
 *.crt

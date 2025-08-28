@@ -563,9 +563,9 @@ create_pipeline() {
     echo "==== Request Details ===="
     echo "  Endpoint: $DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline"
     echo "  AI-Resource-Group: default"
-    echo "  accept: application/json"
-    echo "  content-type: application/json"
-    echo "  Authorization: Bearer [REDACTED]"
+    echo "  Accept: application/json"
+    echo "  Content-Type: application/json"
+    echo "  Authorization: Bearer $ACCESS_TOKEN"
     echo "  Certificate file: $CERT_FILE"
     echo "  Key file: $KEY_FILE"
     echo "  Request body:"
@@ -577,14 +577,14 @@ create_pipeline() {
         --request POST \
         --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
         --header "AI-Resource-Group: default" \
-        --header 'accept: application/json' \
-        --header 'content-type: application/json' \
+        --header 'Accept: application/json' \
+        --header 'Content-Type: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --data "$PIPELINE_CONFIG" \
         --cert "$CERT_FILE" \
         --key "$KEY_FILE")
 
-    print_status "レスポンスを受信しました:"
+    print_status "Response received!:"
     echo "$RESPONSE"
     
     # Extract pipeline ID if successful

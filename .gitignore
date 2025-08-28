@@ -3,6 +3,7 @@
 # Configuration files (may contain sensitive information)
 joule_config.properties
 *.properties
+pipelines.json
 
 # Certificate and key files (security sensitive)
 *.crt

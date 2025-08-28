@@ -15,6 +15,9 @@ NC='\033[0m' # No Color
 # Configuration file
 CONFIG_FILE="joule_config.properties"
 
+# Pipeline management file
+PIPELINES_FILE="pipelines.json"
+
 # Function to print colored output
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -41,6 +44,121 @@ load_config() {
         source "$CONFIG_FILE"
     else
         print_warning "Configuration file not found. Will create new one."
+    fi
+}
+
+# Function to load pipelines
+load_pipelines() {
+    if [ -f "$PIPELINES_FILE" ]; then
+        print_status "Loading pipelines from $PIPELINES_FILE"
+        # pipelines.json is loaded as needed in specific functions
+    else
+        print_warning "Pipelines file not found. Will create new one."
+        # Create empty pipelines file
+        echo "{}" > "$PIPELINES_FILE"
+        print_status "Created empty pipelines file: $PIPELINES_FILE"
+    fi
+}
+
+# Function to save pipeline to pipelines.json
+save_pipeline() {
+    local pipeline_id="$1"
+    local pipeline_data="$2"
+    
+    if [ -z "$pipeline_id" ] || [ -z "$pipeline_data" ]; then
+        print_error "Invalid pipeline data for saving"
+        return 1
+    fi
+    
+    # Load existing pipelines
+    if [ -f "$PIPELINES_FILE" ]; then
+        # Use jq if available, otherwise use simple text replacement
+        if command -v jq &> /dev/null; then
+            # Use jq for proper JSON manipulation
+            jq --arg id "$pipeline_id" --argjson data "$pipeline_data" \
+               '. + {($id): $data}' "$PIPELINES_FILE" > temp_pipelines.json && \
+            mv temp_pipelines.json "$PIPELINES_FILE"
+        else
+            # Simple text replacement (less robust but works without jq)
+            # Check if file is empty or just contains {}
+            if [ ! -s "$PIPELINES_FILE" ] || [ "$(cat "$PIPELINES_FILE")" = "{}" ]; then
+                # File is empty or just contains {}, create new structure
+                echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
+            else
+                # Remove existing entry if present and add new one
+                grep -v "\"$pipeline_id\"" "$PIPELINES_FILE" > temp_pipelines.json 2>/dev/null
+                if [ -s temp_pipelines.json ]; then
+                    # Remove trailing comma if exists and add new entry
+                    sed 's/,$//' temp_pipelines.json > temp_pipelines2.json
+                    echo ",\n  \"$pipeline_id\": $pipeline_data" >> temp_pipelines2.json
+                    echo "}" >> temp_pipelines2.json
+                    mv temp_pipelines2.json "$PIPELINES_FILE"
+                else
+                    # File became empty, create new structure
+                    echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
+                fi
+                rm -f temp_pipelines.json
+            fi
+        fi
+        print_status "Pipeline saved to $PIPELINES_FILE"
+    else
+        # Create new file
+        echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
+        print_status "Created new pipelines file with pipeline: $PIPELINES_FILE"
+    fi
+}
+
+# Function to remove pipeline from pipelines.json
+remove_pipeline() {
+    local pipeline_id="$1"
+    
+    if [ -z "$pipeline_id" ]; then
+        print_error "Invalid pipeline ID for removal"
+        return 1
+    fi
+    
+    if [ -f "$PIPELINES_FILE" ]; then
+        if command -v jq &> /dev/null; then
+            # Use jq for proper JSON manipulation
+            jq "del(.$pipeline_id)" "$PIPELINES_FILE" > temp_pipelines.json && \
+            mv temp_pipelines.json "$PIPELINES_FILE"
+        else
+            # Simple text replacement
+            grep -v "\"$pipeline_id\"" "$PIPELINES_FILE" > temp_pipelines.json
+            mv temp_pipelines.json "$PIPELINES_FILE"
+        fi
+        print_status "Pipeline removed from $PIPELINES_FILE"
+    fi
+}
+
+# Function to get pipeline from pipelines.json
+get_pipeline() {
+    local pipeline_id="$1"
+    
+    if [ -z "$pipeline_id" ]; then
+        print_error "Invalid pipeline ID"
+        return 1
+    fi
+    
+    if [ -f "$PIPELINES_FILE" ]; then
+        if command -v jq &> /dev/null; then
+            jq -r ".$pipeline_id" "$PIPELINES_FILE" 2>/dev/null
+        else
+            # Simple text extraction
+            sed -n '/"'$pipeline_id'":/,/^  }/p' "$PIPELINES_FILE" | grep -v "^  }$" | sed '1s/.*: //'
+        fi
+    fi
+}
+
+# Function to list all pipelines from pipelines.json
+list_pipelines() {
+    if [ -f "$PIPELINES_FILE" ]; then
+        if command -v jq &> /dev/null; then
+            jq -r 'keys[]' "$PIPELINES_FILE" 2>/dev/null
+        else
+            # Simple text extraction
+            grep -o '"[^"]*":' "$PIPELINES_FILE" | sed 's/":$//' | sed 's/^"//'
+        fi
     fi
 }
 
@@ -544,6 +662,24 @@ test_endpoints() {
                             echo "PIPELINE_ID=\"$SELECTED_PIPELINE_ID\"" >> "$CONFIG_FILE"
                             print_status "Pipeline ID saved to configuration: $SELECTED_PIPELINE_ID"
                         fi
+                        
+                        # Also save to pipelines.json if not already present
+                        if ! get_pipeline "$SELECTED_PIPELINE_ID" > /dev/null 2>&1; then
+                            # Extract the full pipeline data from response
+                            PIPELINE_INDEX=$((pipeline_choice-1))
+                            PIPELINE_DATA=$(echo "$RESPONSE" | python3 -m json.tool 2>/dev/null | sed -n "/$((PIPELINE_INDEX+1))/,/^  }/p" | sed '1s/.*: //')
+                            
+                            if [ -n "$PIPELINE_DATA" ]; then
+                                # Add timestamp
+                                PIPELINE_DATA_WITH_TIME=$(echo "$PIPELINE_DATA" | sed 's/}$/,\n  "fetchedAt": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"\n}/')
+                                
+                                if save_pipeline "$SELECTED_PIPELINE_ID" "$PIPELINE_DATA_WITH_TIME"; then
+                                    print_status "Pipeline data saved to $PIPELINES_FILE"
+                                else
+                                    print_warning "Failed to save pipeline data to $PIPELINES_FILE"
+                                fi
+                            fi
+                        fi
                     fi
                 else
                     print_error "Invalid pipeline number selected"
@@ -595,7 +731,7 @@ configure_workzone_integration() {
     print_status "Now let's collect the required information:"
     
     # Get destination name only
-    get_input "Destination Name (e.g., WorkZone-DocumentGrounding)" "" "DESTINATION_NAME"
+    get_input "Destination Name (e.g., DocumentGrounding_WZAdv)" "" "DESTINATION_NAME"
     
     # Save configuration
     echo "DESTINATION_NAME=\"$DESTINATION_NAME\"" >> "$CONFIG_FILE"
@@ -738,19 +874,21 @@ check_execution_status() {
         
         # Extract execution count
         EXECUTION_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
-        if [ -n "$EXECUTION_COUNT" ]; then
+        
+        # Validate that we got a valid number
+        if [ -n "$EXECUTION_COUNT" ] && [[ "$EXECUTION_COUNT" =~ ^[0-9]+$ ]]; then
             echo ""
             print_status "Total Executions: $EXECUTION_COUNT"
-        fi
-        
-        # Ask if user wants to check specific execution
-        if [ "$EXECUTION_COUNT" -gt 0 ]; then
-            echo ""
-            read -p "Do you want to check a specific execution? (y/n): " check_specific
-            if [[ "$check_specific" =~ ^[Yy]$ ]]; then
-                get_input "Enter Execution ID" "" "EXECUTION_ID"
-                if [ -n "$EXECUTION_ID" ]; then
-                    check_specific_execution "$EXECUTION_ID"
+            
+            # Ask if user wants to check specific execution
+            if [ "$EXECUTION_COUNT" -gt 0 ]; then
+                echo ""
+                read -p "Do you want to check a specific execution? (y/n): " check_specific
+                if [[ "$check_specific" =~ ^[Yy]$ ]]; then
+                    get_input "Enter Execution ID" "" "EXECUTION_ID"
+                    if [ -n "$EXECUTION_ID" ]; then
+                        check_specific_execution "$EXECUTION_ID"
+                    fi
                 fi
             fi
         fi
@@ -840,7 +978,7 @@ check_pipeline_documents() {
         
         # Extract document count
         DOC_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
-        if [ -n "$DOC_COUNT" ]; then
+        if [ -n "$DOC_COUNT" ] && [[ "$DOC_COUNT" =~ ^[0-9]+$ ]]; then
             echo ""
             print_status "Total Documents: $DOC_COUNT"
         fi
@@ -879,7 +1017,7 @@ check_execution_documents() {
         
         # Extract document count
         DOC_COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
-        if [ -n "$DOC_COUNT" ]; then
+        if [ -n "$DOC_COUNT" ] && [[ "$DOC_COUNT" =~ ^[0-9]+$ ]]; then
             echo ""
             print_status "Total Documents in Execution: $DOC_COUNT"
         fi
@@ -1110,6 +1248,11 @@ delete_pipeline() {
     if [ "$HTTP_STATUS" -eq 204 ] || [ "$HTTP_STATUS" -eq 200 ]; then
         print_status "Pipeline deleted successfully!"
         
+        # Remove pipeline from pipelines.json
+        if remove_pipeline "$PIPELINE_ID"; then
+            print_status "Pipeline removed from $PIPELINES_FILE"
+        fi
+        
         # Remove pipeline information from config
         if [ -f "$CONFIG_FILE" ]; then
             # Create temporary config without pipeline info
@@ -1130,6 +1273,11 @@ delete_pipeline() {
         
     elif [ "$HTTP_STATUS" -eq 404 ]; then
         print_warning "Pipeline not found (404). It may have been already deleted."
+        
+        # Remove pipeline from pipelines.json anyway
+        if remove_pipeline "$PIPELINE_ID"; then
+            print_status "Pipeline removed from $PIPELINES_FILE"
+        fi
         
         # Remove pipeline information from config anyway
         if [ -f "$CONFIG_FILE" ]; then
@@ -1227,20 +1375,86 @@ create_pipeline() {
     print_status "Response received!:"
     echo "$RESPONSE"
     
-    # Extract pipeline ID if successful
+    # Extract pipeline ID if successful (try both "id" and "pipelineId" fields)
+    print_status "Debug: Extracting pipeline ID from response"
+    print_status "Debug: Response content: '$RESPONSE'"
+    
+    # Try to extract from "id" field
     PIPELINE_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+    print_status "Debug: Extracted from 'id' field: '$PIPELINE_ID'"
+    
+    if [ -z "$PIPELINE_ID" ]; then
+        # Try to extract from "pipelineId" field
+        print_status "Debug: Trying 'pipelineId' field..."
+        PIPELINE_ID=$(echo "$RESPONSE" | grep -o '"pipelineId":"[^"]*"' | cut -d'"' -f4)
+        print_status "Debug: Extracted from 'pipelineId' field: '$PIPELINE_ID'"
+        
+        # If still empty, try alternative approach
+        if [ -z "$PIPELINE_ID" ]; then
+            print_status "Debug: Trying alternative extraction method..."
+            PIPELINE_ID=$(echo "$RESPONSE" | sed 's/.*"pipelineId": *"\([^"]*\)".*/\1/')
+            print_status "Debug: Alternative extraction result: '$PIPELINE_ID'"
+            
+            # If still empty, try jq if available
+            if [ -z "$PIPELINE_ID" ] && command -v jq &> /dev/null; then
+                print_status "Debug: Trying jq extraction..."
+                PIPELINE_ID=$(echo "$RESPONSE" | jq -r '.pipelineId' 2>/dev/null)
+                print_status "Debug: jq extraction result: '$PIPELINE_ID'"
+            fi
+            
+            # Last resort: try with awk
+            if [ -z "$PIPELINE_ID" ]; then
+                print_status "Debug: Trying awk extraction..."
+                PIPELINE_ID=$(echo "$RESPONSE" | awk -F'"' '/pipelineId/ {print $4}')
+                print_status "Debug: awk extraction result: '$PIPELINE_ID'"
+            fi
+        fi
+    fi
+    
     if [ -n "$PIPELINE_ID" ]; then
         print_status "Pipeline created successfully with ID: $PIPELINE_ID"
+        
         # Save pipeline configuration to config
         echo "AI_RESOURCE_GROUP=\"$AI_RESOURCE_GROUP\"" >> "$CONFIG_FILE"
         echo "GENERIC_SECRET_NAME=\"$GENERIC_SECRET_NAME\"" >> "$CONFIG_FILE"
         echo "PIPELINE_ID=\"$PIPELINE_ID\"" >> "$CONFIG_FILE"
+        
+        # Save pipeline to pipelines.json
+        PIPELINE_DATA="{
+            \"type\": \"WorkZone\",
+            \"configuration\": {
+                \"destination\": \"$GENERIC_SECRET_NAME\"
+            },
+            \"metadata\": {
+                \"destination\": \"$GENERIC_SECRET_NAME\"
+            },
+            \"createdAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+            \"status\": \"CREATED\"
+        }"
+        
+        print_status "Attempting to save pipeline to $PIPELINES_FILE"
+        print_status "Pipeline ID: $PIPELINE_ID"
+        print_status "Pipeline Data: $PIPELINE_DATA"
+        
+        if save_pipeline "$PIPELINE_ID" "$PIPELINE_DATA"; then
+            print_status "Pipeline saved to $PIPELINES_FILE"
+            
+            # Verify the save operation
+            if [ -f "$PIPELINES_FILE" ]; then
+                print_status "Verifying saved data:"
+                cat "$PIPELINES_FILE"
+            fi
+        else
+            print_warning "Failed to save pipeline to $PIPELINES_FILE"
+        fi
         
         # Save the updated configuration
         save_config
         print_status "Configuration updated and saved successfully"
     else
         print_warning "Pipeline ID not found in response"
+        echo "Response: $RESPONSE"
+        echo "Tried to extract from both 'id' and 'pipelineId' fields"
     fi
 }
 
@@ -1314,6 +1528,9 @@ show_menu() {
 main() {
     # Load existing configuration if available
     load_config
+    
+    # Load pipelines file
+    load_pipelines
     
     while true; do
         show_menu

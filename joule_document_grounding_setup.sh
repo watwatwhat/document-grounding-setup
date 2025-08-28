@@ -496,7 +496,7 @@ configure_workzone_integration() {
     print_status "Step 3: Create Destination in BTP Cockpit"
     echo "1. Go to Connectivity > Destinations"
     echo "2. Create new destination with the following details:"
-    echo "   - URL: Your DWS URL (from Admin Console Overview screen)"
+    echo "   - URL: Your DWS URL (from Admin Console Overview screen)/api/v1/dg-pipeline/metadata"
     echo "   - Proxy Type: Internet"
     echo "   - Authentication: OAuth2ClientCredentials"
     echo "   - Client ID: OAuth client Key from Step 1"
@@ -525,13 +525,21 @@ configure_workzone_integration() {
 create_pipeline() {
     print_header "Step 23: Creating WorkZone Pipeline"
     
-    # Load the access token
+    print_status "Getting fresh access token for pipeline creation..."
+    
+    # Get a fresh access token
+    if ! get_access_token; then
+        print_error "Failed to get access token. Cannot proceed with pipeline creation."
+        return 1
+    fi
+    
+    # Load the access token from config (which was just updated)
     if [ -f "$CONFIG_FILE" ]; then
         source "$CONFIG_FILE"
     fi
     
     if [ -z "$ACCESS_TOKEN" ]; then
-        print_error "Access token not found. Please run the token generation step first."
+        print_error "Access token not found after generation. Cannot proceed."
         return 1
     fi
     
@@ -576,7 +584,6 @@ create_pipeline() {
     RESPONSE=$(curl -s \
         --request POST \
         --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline" \
-        --header "AI-Resource-Group: default" \
         --header 'Accept: application/json' \
         --header 'Content-Type: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
@@ -595,6 +602,10 @@ create_pipeline() {
         echo "AI_RESOURCE_GROUP=\"$AI_RESOURCE_GROUP\"" >> "$CONFIG_FILE"
         echo "GENERIC_SECRET_NAME=\"$GENERIC_SECRET_NAME\"" >> "$CONFIG_FILE"
         echo "PIPELINE_ID=\"$PIPELINE_ID\"" >> "$CONFIG_FILE"
+        
+        # Save the updated configuration
+        save_config
+        print_status "Configuration updated and saved successfully"
     else
         print_warning "Pipeline ID not found in response"
     fi

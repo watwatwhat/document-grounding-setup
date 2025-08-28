@@ -949,9 +949,23 @@ check_execution_status() {
     
     print_status "Checking executions for pipeline: $PIPELINE_ID"
     
+    # Ask for pagination parameters
+    echo ""
+    read -p "Enter number of executions to fetch (top, default 100): " top_param
+    top_param=${top_param:-100}
+    
+    read -p "Enter number of executions to skip (skip, default 0): " skip_param
+    skip_param=${skip_param:-0}
+    
+    # Build URL with pagination parameters
+    EXECUTIONS_URL="$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions"
+    if [ "$top_param" != "100" ] || [ "$skip_param" != "0" ]; then
+        EXECUTIONS_URL="$EXECUTIONS_URL?top=$top_param&skip=$skip_param"
+    fi
+    
     RESPONSE=$(curl -s \
         --request GET \
-        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions" \
+        --url "$EXECUTIONS_URL" \
         --header 'Accept: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --cert "$CERT_FILE" \
@@ -972,9 +986,58 @@ check_execution_status() {
             # Ask if user wants to check specific execution
             if [ "$EXECUTION_COUNT" -gt 0 ]; then
                 echo ""
+                print_status "Available Executions:"
+                
+                # Extract execution information
+                EXECUTION_IDS=()
+                EXECUTION_STATUSES=()
+                EXECUTION_CREATED=()
+                
+                # Extract IDs
+                while IFS= read -r id; do
+                    if [ -n "$id" ]; then
+                        EXECUTION_IDS+=("$id")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract statuses
+                while IFS= read -r status; do
+                    if [ -n "$status" ]; then
+                        EXECUTION_STATUSES+=("$status")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"status": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract created timestamps
+                while IFS= read -r created; do
+                    if [ -n "$created" ]; then
+                        EXECUTION_CREATED+=("$created")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"createdAt": "[^"]*"' | cut -d'"' -f4)
+                
+                # Display execution information
+                for i in "${!EXECUTION_IDS[@]}"; do
+                    echo "$((i+1)). Execution ID: ${EXECUTION_IDS[$i]}"
+                    if [ -n "${EXECUTION_STATUSES[$i]}" ]; then
+                        echo "   Status: ${EXECUTION_STATUSES[$i]}"
+                    fi
+                    if [ -n "${EXECUTION_CREATED[$i]}" ]; then
+                        echo "   Created: ${EXECUTION_CREATED[$i]}"
+                    fi
+                    echo ""
+                done
+                
                 read -p "Do you want to check a specific execution? (y/n): " check_specific
                 if [[ "$check_specific" =~ ^[Yy]$ ]]; then
-                    get_input "Enter Execution ID" "" "EXECUTION_ID"
+                    echo ""
+                    read -p "Select execution number (1-${#EXECUTION_IDS[@]}) or enter custom Execution ID: " execution_choice
+                    
+                    if [[ "$execution_choice" =~ ^[0-9]+$ ]] && [ "$execution_choice" -ge 1 ] && [ "$execution_choice" -le ${#EXECUTION_IDS[@]} ]; then
+                        EXECUTION_ID="${EXECUTION_IDS[$((execution_choice-1))]}"
+                        print_status "Selected Execution ID: $EXECUTION_ID"
+                    else
+                        EXECUTION_ID="$execution_choice"
+                    fi
+                    
                     if [ -n "$EXECUTION_ID" ]; then
                         check_specific_execution "$EXECUTION_ID"
                     fi
@@ -1084,9 +1147,23 @@ check_document_status() {
 check_pipeline_documents() {
     print_status "Checking all documents in pipeline: $PIPELINE_ID"
     
+    # Ask for pagination parameters
+    echo ""
+    read -p "Enter number of documents to fetch (top, default 100): " top_param
+    top_param=${top_param:-100}
+    
+    read -p "Enter number of documents to skip (skip, default 0): " skip_param
+    skip_param=${skip_param:-0}
+    
+    # Build URL with pagination parameters
+    DOCS_URL="$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents"
+    if [ "$top_param" != "100" ] || [ "$skip_param" != "0" ]; then
+        DOCS_URL="$DOCS_URL?top=$top_param&skip=$skip_param"
+    fi
+    
     RESPONSE=$(curl -s \
         --request GET \
-        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents" \
+        --url "$DOCS_URL" \
         --header 'Accept: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --cert "$CERT_FILE" \
@@ -1101,6 +1178,80 @@ check_pipeline_documents() {
         if [ -n "$DOC_COUNT" ] && [[ "$DOC_COUNT" =~ ^[0-9]+$ ]]; then
             echo ""
             print_status "Total Documents: $DOC_COUNT"
+            
+            # Extract and display document information
+            if [ "$DOC_COUNT" -gt 0 ]; then
+                echo ""
+                print_status "Available Documents:"
+                
+                # Extract document information
+                DOC_IDS=()
+                DOC_STATUSES=()
+                DOC_TITLES=()
+                DOC_CREATED=()
+                
+                # Extract IDs
+                while IFS= read -r id; do
+                    if [ -n "$id" ]; then
+                        DOC_IDS+=("$id")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract statuses
+                while IFS= read -r status; do
+                    if [ -n "$status" ]; then
+                        DOC_STATUSES+=("$status")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"status": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract titles
+                while IFS= read -r title; do
+                    if [ -n "$title" ]; then
+                        DOC_TITLES+=("$title")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"title": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract created timestamps
+                while IFS= read -r created; do
+                    if [ -n "$created" ]; then
+                        DOC_CREATED+=("$created")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"createdTimestamp": "[^"]*"' | cut -d'"' -f4)
+                
+                # Display document information
+                for i in "${!DOC_IDS[@]}"; do
+                    echo "$((i+1)). Document ID: ${DOC_IDS[$i]}"
+                    if [ -n "${DOC_STATUSES[$i]}" ]; then
+                        echo "   Status: ${DOC_STATUSES[$i]}"
+                    fi
+                    if [ -n "${DOC_TITLES[$i]}" ]; then
+                        echo "   Title: ${DOC_TITLES[$i]}"
+                    fi
+                    if [ -n "${DOC_CREATED[$i]}" ]; then
+                        echo "   Created: ${DOC_CREATED[$i]}"
+                    fi
+                    echo ""
+                done
+                
+                # Ask if user wants to check specific document
+                echo ""
+                read -p "Do you want to check a specific document? (y/n): " check_specific
+                if [[ "$check_specific" =~ ^[Yy]$ ]]; then
+                    echo ""
+                    read -p "Select document number (1-${#DOC_IDS[@]}) or enter custom Document ID: " document_choice
+                    
+                    if [[ "$document_choice" =~ ^[0-9]+$ ]] && [ "$document_choice" -ge 1 ] && [ "$document_choice" -le ${#DOC_IDS[@]} ]; then
+                        DOCUMENT_ID="${DOC_IDS[$((document_choice-1))]}"
+                        print_status "Selected Document ID: $DOCUMENT_ID"
+                    else
+                        DOCUMENT_ID="$document_choice"
+                    fi
+                    
+                    if [ -n "$DOCUMENT_ID" ]; then
+                        check_specific_document
+                    fi
+                fi
+            fi
         fi
     else
         print_error "Failed to get pipeline documents"
@@ -1115,7 +1266,62 @@ check_execution_documents() {
         return 1
     fi
     
-    get_input "Enter Execution ID" "" "EXECUTION_ID"
+    # Try to get execution ID from available executions
+    if [ -z "$EXECUTION_ID" ]; then
+        print_status "Fetching available executions for pipeline: $PIPELINE_ID"
+        
+        EXEC_RESPONSE=$(curl -s \
+            --request GET \
+            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --cert "$CERT_FILE" \
+            --key "$KEY_FILE")
+        
+        if [ $? -eq 0 ]; then
+            # Extract execution information
+            EXEC_IDS=()
+            EXEC_STATUSES=()
+            
+            while IFS= read -r id; do
+                if [ -n "$id" ]; then
+                    EXEC_IDS+=("$id")
+                fi
+            done < <(echo "$EXEC_RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+            
+            while IFS= read -r status; do
+                if [ -n "$status" ]; then
+                    EXEC_STATUSES+=("$status")
+                fi
+            done < <(echo "$EXEC_RESPONSE" | grep -o '"status": "[^"]*"' | cut -d'"' -f4)
+            
+            if [ ${#EXEC_IDS[@]} -gt 0 ]; then
+                echo ""
+                print_status "Available Executions:"
+                for i in "${!EXEC_IDS[@]}"; do
+                    echo "$((i+1)). Execution ID: ${EXEC_IDS[$i]}"
+                    if [ -n "${EXEC_STATUSES[$i]}" ]; then
+                        echo "   Status: ${EXEC_STATUSES[$i]}"
+                    fi
+                    echo ""
+                done
+                
+                read -p "Select execution number (1-${#EXEC_IDS[@]}) or enter custom Execution ID: " execution_choice
+                
+                if [[ "$execution_choice" =~ ^[0-9]+$ ]] && [ "$execution_choice" -ge 1 ] && [ "$execution_choice" -le ${#EXEC_IDS[@]} ]; then
+                    EXECUTION_ID="${EXEC_IDS[$((execution_choice-1))]}"
+                    print_status "Selected Execution ID: $EXECUTION_ID"
+                else
+                    EXECUTION_ID="$execution_choice"
+                fi
+            else
+                get_input "Enter Execution ID" "" "EXECUTION_ID"
+            fi
+        else
+            get_input "Enter Execution ID" "" "EXECUTION_ID"
+        fi
+    fi
+    
     if [ -z "$EXECUTION_ID" ]; then
         print_error "Execution ID is required."
         return 1
@@ -1123,9 +1329,23 @@ check_execution_documents() {
     
     print_status "Checking documents in execution: $EXECUTION_ID"
     
+    # Ask for pagination parameters
+    echo ""
+    read -p "Enter number of documents to fetch (top, default 100): " top_param
+    top_param=${top_param:-100}
+    
+    read -p "Enter number of documents to skip (skip, default 0): " skip_param
+    skip_param=${skip_param:-0}
+    
+    # Build URL with pagination parameters
+    EXEC_DOCS_URL="$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions/$EXECUTION_ID/documents"
+    if [ "$top_param" != "100" ] || [ "$skip_param" != "0" ]; then
+        EXEC_DOCS_URL="$EXEC_DOCS_URL?top=$top_param&skip=$skip_param"
+    fi
+    
     RESPONSE=$(curl -s \
         --request GET \
-        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions/$EXECUTION_ID/documents" \
+        --url "$EXEC_DOCS_URL" \
         --header 'Accept: application/json' \
         --header "Authorization: Bearer $ACCESS_TOKEN" \
         --cert "$CERT_FILE" \
@@ -1140,6 +1360,80 @@ check_execution_documents() {
         if [ -n "$DOC_COUNT" ] && [[ "$DOC_COUNT" =~ ^[0-9]+$ ]]; then
             echo ""
             print_status "Total Documents in Execution: $DOC_COUNT"
+            
+            # Extract and display document information
+            if [ "$DOC_COUNT" -gt 0 ]; then
+                echo ""
+                print_status "Available Documents:"
+                
+                # Extract document information
+                DOC_IDS=()
+                DOC_STATUSES=()
+                DOC_TITLES=()
+                DOC_CREATED=()
+                
+                # Extract IDs
+                while IFS= read -r id; do
+                    if [ -n "$id" ]; then
+                        DOC_IDS+=("$id")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract statuses
+                while IFS= read -r status; do
+                    if [ -n "$status" ]; then
+                        DOC_STATUSES+=("$status")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"status": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract titles
+                while IFS= read -r title; do
+                    if [ -n "$title" ]; then
+                        DOC_TITLES+=("$title")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"title": "[^"]*"' | cut -d'"' -f4)
+                
+                # Extract created timestamps
+                while IFS= read -r created; do
+                    if [ -n "$created" ]; then
+                        DOC_CREATED+=("$created")
+                    fi
+                done < <(echo "$RESPONSE" | grep -o '"createdTimestamp": "[^"]*"' | cut -d'"' -f4)
+                
+                # Display document information
+                for i in "${!DOC_IDS[@]}"; do
+                    echo "$((i+1)). Document ID: ${DOC_IDS[$i]}"
+                    if [ -n "${DOC_STATUSES[$i]}" ]; then
+                        echo "   Status: ${DOC_STATUSES[$i]}"
+                    fi
+                    if [ -n "${DOC_TITLES[$i]}" ]; then
+                        echo "   Title: ${DOC_TITLES[$i]}"
+                    fi
+                    if [ -n "${DOC_CREATED[$i]}" ]; then
+                        echo "   Created: ${DOC_CREATED[$i]}"
+                    fi
+                    echo ""
+                done
+                
+                # Ask if user wants to check specific document
+                echo ""
+                read -p "Do you want to check a specific document? (y/n): " check_specific
+                if [[ "$check_specific" =~ ^[Yy]$ ]]; then
+                    echo ""
+                    read -p "Select document number (1-${#DOC_IDS[@]}) or enter custom Document ID: " document_choice
+                    
+                    if [[ "$document_choice" =~ ^[0-9]+$ ]] && [ "$document_choice" -ge 1 ] && [ "$document_choice" -le ${#DOC_IDS[@]} ]; then
+                        DOCUMENT_ID="${DOC_IDS[$((document_choice-1))]}"
+                        print_status "Selected Document ID: $DOCUMENT_ID"
+                    else
+                        DOCUMENT_ID="$document_choice"
+                    fi
+                    
+                    if [ -n "$DOCUMENT_ID" ]; then
+                        check_specific_document
+                    fi
+                fi
+            fi
         fi
     else
         print_error "Failed to get execution documents"
@@ -1154,25 +1448,80 @@ check_specific_document() {
         return 1
     fi
     
-    get_input "Enter Document ID" "" "DOCUMENT_ID"
     if [ -z "$DOCUMENT_ID" ]; then
-        print_error "Document ID is required."
-        return 1
+        get_input "Enter Document ID" "" "DOCUMENT_ID"
+        if [ -z "$DOCUMENT_ID" ]; then
+            print_error "Document ID is required."
+            return 1
+        fi
     fi
     
     print_status "Checking specific document: $DOCUMENT_ID"
     
-    RESPONSE=$(curl -s \
-        --request GET \
-        --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents/$DOCUMENT_ID" \
-        --header 'Accept: application/json' \
-        --header "Authorization: Bearer $ACCESS_TOKEN" \
-        --cert "$CERT_FILE" \
-        --key "$KEY_FILE")
+    # Check if we have execution ID (for execution-specific document)
+    if [ -n "$EXECUTION_ID" ]; then
+        print_status "Checking document in execution context: $EXECUTION_ID"
+        RESPONSE=$(curl -s \
+            --request GET \
+            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/executions/$EXECUTION_ID/documents/$DOCUMENT_ID" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --cert "$CERT_FILE" \
+            --key "$KEY_FILE")
+    else
+        # Check document in pipeline context
+        RESPONSE=$(curl -s \
+            --request GET \
+            --url "$DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline/$PIPELINE_ID/documents/$DOCUMENT_ID" \
+            --header 'Accept: application/json' \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --cert "$CERT_FILE" \
+            --key "$KEY_FILE")
+    fi
     
     if [ $? -eq 0 ]; then
         print_status "Specific Document Response:"
         echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+        
+        # Extract and display key information
+        echo ""
+        print_status "Document Summary:"
+        
+        # Extract status
+        STATUS=$(echo "$RESPONSE" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$STATUS" ]; then
+            echo "  Status: $STATUS"
+        fi
+        
+        # Extract title
+        TITLE=$(echo "$RESPONSE" | grep -o '"title":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$TITLE" ]; then
+            echo "  Title: $TITLE"
+        fi
+        
+        # Extract created timestamp
+        CREATED=$(echo "$RESPONSE" | grep -o '"createdTimestamp":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$CREATED" ]; then
+            echo "  Created: $CREATED"
+        fi
+        
+        # Extract last updated timestamp
+        UPDATED=$(echo "$RESPONSE" | grep -o '"lastUpdatedTimestamp":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$UPDATED" ]; then
+            echo "  Last Updated: $UPDATED"
+        fi
+        
+        # Extract view location if available
+        VIEW_LOCATION=$(echo "$RESPONSE" | grep -o '"viewLocation":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$VIEW_LOCATION" ]; then
+            echo "  View Location: $VIEW_LOCATION"
+        fi
+        
+        # Extract download location if available
+        DOWNLOAD_LOCATION=$(echo "$RESPONSE" | grep -o '"downloadLocation":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$DOWNLOAD_LOCATION" ]; then
+            echo "  Download Location: $DOWNLOAD_LOCATION"
+        fi
     else
         print_error "Failed to get specific document"
         echo "Response: $RESPONSE"

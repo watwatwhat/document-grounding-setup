@@ -80,30 +80,85 @@ save_pipeline() {
             mv temp_pipelines.json "$PIPELINES_FILE"
         else
             # Simple text replacement (less robust but works without jq)
-            # Check if file is empty or just contains {}
-            if [ ! -s "$PIPELINES_FILE" ] || [ "$(cat "$PIPELINES_FILE")" = "{}" ]; then
-                # File is empty or just contains {}, create new structure
-                echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
+                    # Check if file is empty or just contains {}
+        if [ ! -s "$PIPELINES_FILE" ] || [ "$(cat "$PIPELINES_FILE")" = "{}" ]; then
+            # File is empty or just contains {}, create new structure
+            cat > "$PIPELINES_FILE" << EOF
+{
+  "$pipeline_id": {
+    "type": "WorkZone",
+    "configuration": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "metadata": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "status": "CREATED"
+  }
+}
+EOF
+        else
+            # Remove existing entry if present and add new one
+            grep -v "\"$pipeline_id\"" "$PIPELINES_FILE" > temp_pipelines.json 2>/dev/null
+            if [ -s temp_pipelines.json ]; then
+                # Remove trailing comma if exists and add new entry
+                sed 's/,$//' temp_pipelines.json > temp_pipelines2.json
+                cat >> temp_pipelines2.json << EOF
+,
+  "$pipeline_id": {
+    "type": "WorkZone",
+    "configuration": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "metadata": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "status": "CREATED"
+  }
+}
+EOF
+                mv temp_pipelines2.json "$PIPELINES_FILE"
             else
-                # Remove existing entry if present and add new one
-                grep -v "\"$pipeline_id\"" "$PIPELINES_FILE" > temp_pipelines.json 2>/dev/null
-                if [ -s temp_pipelines.json ]; then
-                    # Remove trailing comma if exists and add new entry
-                    sed 's/,$//' temp_pipelines.json > temp_pipelines2.json
-                    echo ",\n  \"$pipeline_id\": $pipeline_data" >> temp_pipelines2.json
-                    echo "}" >> temp_pipelines2.json
-                    mv temp_pipelines2.json "$PIPELINES_FILE"
-                else
-                    # File became empty, create new structure
-                    echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
-                fi
-                rm -f temp_pipelines.json
+                # File became empty, create new structure
+                cat > "$PIPELINES_FILE" << EOF
+{
+  "$pipeline_id": {
+    "type": "WorkZone",
+    "configuration": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "metadata": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "status": "CREATED"
+  }
+}
+EOF
             fi
+            rm -f temp_pipelines.json
+        fi
         fi
         print_status "Pipeline saved to $PIPELINES_FILE"
     else
         # Create new file
-        echo "{\n  \"$pipeline_id\": $pipeline_data\n}" > "$PIPELINES_FILE"
+        cat > "$PIPELINES_FILE" << EOF
+{
+  "$pipeline_id": {
+    "type": "WorkZone",
+    "configuration": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "metadata": {
+      "destination": "DocumentGrounding_WZAdv"
+    },
+    "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "status": "CREATED"
+  }
+}
+EOF
         print_status "Created new pipelines file with pipeline: $PIPELINES_FILE"
     fi
 }
@@ -161,6 +216,8 @@ list_pipelines() {
         fi
     fi
 }
+
+
 
 # Function to save configuration
 save_config() {
@@ -587,6 +644,20 @@ test_endpoints() {
         print_warning "Unexpected response received"
     fi
     
+    # Debug: Show the actual response structure
+    if [[ "$RESPONSE" != "[]" ]] && [[ "$RESPONSE" != "null" ]]; then
+        echo ""
+        print_status "Debug: Response structure analysis:"
+        echo "Raw response: $RESPONSE"
+        
+        # Try to format with python3 if available
+        if command -v python3 &> /dev/null; then
+            echo ""
+            print_status "Formatted response:"
+            echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "Failed to format JSON"
+        fi
+    fi
+    
     # Parse and display pipeline information for selection
     if [[ "$RESPONSE" != "[]" ]] && [[ "$RESPONSE" != "null" ]]; then
         echo ""
@@ -603,87 +674,43 @@ test_endpoints() {
             echo "Total Pipelines: $PIPELINE_COUNT"
             echo ""
             
-            # Extract pipeline IDs and basic info using grep
-            PIPELINE_IDS=()
-            PIPELINE_TYPES=()
-            PIPELINE_DESTINATIONS=()
-            
-            # Extract IDs
-            while IFS= read -r id; do
-                if [ -n "$id" ]; then
-                    PIPELINE_IDS+=("$id")
-                fi
-            done < <(echo "$RESPONSE" | grep -o '"id": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract types
-            while IFS= read -r type; do
-                if [ -n "$type" ]; then
-                    PIPELINE_TYPES+=("$type")
-                fi
-            done < <(echo "$RESPONSE" | grep -o '"type": "[^"]*"' | cut -d'"' -f4)
-            
-            # Extract destinations
-            while IFS= read -r dest; do
-                if [ -n "$dest" ]; then
-                    PIPELINE_DESTINATIONS+=("$dest")
-                fi
-            done < <(echo "$RESPONSE" | grep -o '"destination": "[^"]*"' | cut -d'"' -f4)
-            
             # Display pipeline information
-            for i in "${!PIPELINE_IDS[@]}"; do
-                echo "$((i+1)). Pipeline ID: ${PIPELINE_IDS[$i]}"
-                if [ -n "${PIPELINE_TYPES[$i]}" ]; then
-                    echo "   Type: ${PIPELINE_TYPES[$i]}"
-                fi
-                if [ -n "${PIPELINE_DESTINATIONS[$i]}" ]; then
-                    echo "   Destination: ${PIPELINE_DESTINATIONS[$i]}"
-                fi
-                echo ""
-            done
-            
-            # Ask if user wants to select a pipeline for configuration
             echo ""
-            read -p "Do you want to select a pipeline for configuration? (y/n): " select_pipeline
-            if [[ "$select_pipeline" =~ ^[Yy]$ ]]; then
-                read -p "Enter pipeline number (1-${#PIPELINE_IDS[@]}): " pipeline_choice
-                if [[ "$pipeline_choice" =~ ^[0-9]+$ ]] && [ "$pipeline_choice" -ge 1 ] && [ "$pipeline_choice" -le ${#PIPELINE_IDS[@]} ]; then
-                    SELECTED_PIPELINE_ID="${PIPELINE_IDS[$((pipeline_choice-1))]}"
-                    print_status "Selected Pipeline ID: $SELECTED_PIPELINE_ID"
-                    
-                    # Ask if user wants to save this pipeline ID
-                    read -p "Do you want to save this pipeline ID to configuration? (y/n): " save_pipeline
-                    if [[ "$save_pipeline" =~ ^[Yy]$ ]]; then
-                        # Update config file with selected pipeline ID
-                        if [ -f "$CONFIG_FILE" ]; then
-                            # Remove existing pipeline ID if present
-                            grep -v "PIPELINE_ID" "$CONFIG_FILE" > temp_config
-                            mv temp_config "$CONFIG_FILE"
-                            # Add new pipeline ID
-                            echo "PIPELINE_ID=\"$SELECTED_PIPELINE_ID\"" >> "$CONFIG_FILE"
-                            print_status "Pipeline ID saved to configuration: $SELECTED_PIPELINE_ID"
-                        fi
-                        
-                        # Also save to pipelines.json if not already present
-                        if ! get_pipeline "$SELECTED_PIPELINE_ID" > /dev/null 2>&1; then
-                            # Extract the full pipeline data from response
-                            PIPELINE_INDEX=$((pipeline_choice-1))
-                            PIPELINE_DATA=$(echo "$RESPONSE" | python3 -m json.tool 2>/dev/null | sed -n "/$((PIPELINE_INDEX+1))/,/^  }/p" | sed '1s/.*: //')
-                            
-                            if [ -n "$PIPELINE_DATA" ]; then
-                                # Add timestamp
-                                PIPELINE_DATA_WITH_TIME=$(echo "$PIPELINE_DATA" | sed 's/}$/,\n  "fetchedAt": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"\n}/')
-                                
-                                if save_pipeline "$SELECTED_PIPELINE_ID" "$PIPELINE_DATA_WITH_TIME"; then
-                                    print_status "Pipeline data saved to $PIPELINES_FILE"
-                                else
-                                    print_warning "Failed to save pipeline data to $PIPELINES_FILE"
-                                fi
-                            fi
-                        fi
-                    fi
+            print_status "Available Pipelines:"
+            echo "Total Pipelines: $PIPELINE_COUNT"
+            echo ""
+            
+            # Show formatted response
+            if command -v python3 &> /dev/null; then
+                print_status "Formatted pipeline data:"
+                echo "$RESPONSE" | python3 -m json.tool
+            else
+                print_status "Pipeline data:"
+                echo "$RESPONSE"
+            fi
+            
+            # Ask if user wants to refresh pipelines.json with current data
+            echo ""
+            read -p "Do you want to refresh $PIPELINES_FILE with current pipeline data? (y/n): " refresh_pipelines
+            if [[ "$refresh_pipelines" =~ ^[Yy]$ ]]; then
+                # Simply save the response directly to pipelines.json
+                print_status "Refreshing $PIPELINES_FILE with current pipeline data..."
+                
+                # Convert array response to object format for easier access
+                if command -v jq &> /dev/null; then
+                    # Use jq to convert array to object with pipeline IDs as keys
+                    jq -r 'reduce .[] as $pipeline ({}; . + {($pipeline.id): $pipeline})' <<< "$RESPONSE" > "$PIPELINES_FILE"
+                    print_status "$PIPELINES_FILE refreshed successfully using jq!"
                 else
-                    print_error "Invalid pipeline number selected"
+                    # Simple approach: create a new file with the response data
+                    # Add timestamp to each pipeline
+                    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                    echo "$RESPONSE" | sed 's/}/, "fetchedAt": "'$TIMESTAMP'", "status": "FETCHED"}/g' > "$PIPELINES_FILE"
+                    print_status "$PIPELINES_FILE refreshed successfully!"
                 fi
+                
+                print_status "Updated content:"
+                cat "$PIPELINES_FILE"
             fi
         fi
     fi
@@ -1550,14 +1577,7 @@ create_pipeline() {
     
 
     echo "==== Request Details ===="
-    echo "  Endpoint: $DOC_GROUNDING_SERVICE_BINDING_URL/pipeline/api/v1/pipeline"
-    echo "  AI-Resource-Group: default"
-    echo "  Accept: application/json"
-    echo "  Content-Type: application/json"
-    echo "  Authorization: Bearer $ACCESS_TOKEN"
-    echo "  Certificate file: $CERT_FILE"
-    echo "  Key file: $KEY_FILE"
-    echo "  Request body:"
+    echo "  Pipeline Setting:"
     echo "  $PIPELINE_CONFIG"
     echo "======================="
 

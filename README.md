@@ -16,7 +16,7 @@ SAP Jouleのドキュメントグラウンディング機能を使用するに�
 
 ## 作成されたファイル
 
-1. **`joule_document_grounding_setup.sh`** - メインのシェルスクリプト
+1. **`main.sh`** - メインのシェルスクリプト
 2. **`template/joule_config.properties.template`** - 設定ファイルのテンプレート
 3. **`README.md`** - 詳細な使用方法とセットアップ手順
 
@@ -33,7 +33,7 @@ SAP Jouleのドキュメントグラウンディング機能を使用するに�
 2. 実行権限を付与：
 
 ```bash
-chmod +x joule_document_grounding_setup.sh
+chmod +x main.sh
 ```
 
 ## 使用方法
@@ -41,7 +41,7 @@ chmod +x joule_document_grounding_setup.sh
 ### 基本的な使用方法
 
 ```bash
-./joule_document_grounding_setup.sh
+./main.sh
 ```
 
 ### メニューオプション
@@ -198,7 +198,7 @@ SAP AI CoreのWorkZoneパイプラインを作成します。以下の情報が�
 
 ```
 documentGroundingSetup/
-├── joule_document_grounding_setup.sh          # メインスクリプト
+├── main.sh          # メインスクリプト
 ├── joule_config.properties                    # 設定ファイル（自動生成）
 ├── README.md                                  # このファイル
 ├── template/                                  # テンプレートファイル

@@ -340,180 +340,98 @@ create_cloud_identity_instance() {
 create_certificate_files() {
     print_header "Step 16-19: Creating Certificate Files"
     
-            print_status "Choose how to input certificate and key values:"
-        echo "1. Enter values directly (for small certificates)"
-        echo "2. Read from files (recommended for large certificates)"
-        echo "3. Use clipboard (macOS only)"
+    print_status "Certificate and key values will be read from files only."
+    echo ""
+    
+    # Load configuration to get CLOUD_IDENTITY_SERVICE_BINDING_NAME
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+    
+    if [ -z "$CLOUD_IDENTITY_SERVICE_BINDING_NAME" ]; then
+        print_error "CLOUD_IDENTITY_SERVICE_BINDING_NAME not found in configuration file"
+        print_status "Please complete the Cloud Identity Services setup first (Step 2)"
+        return 1
+    fi
+    
+    print_status "Using Cloud Identity Service Binding: $CLOUD_IDENTITY_SERVICE_BINDING_NAME"
+    echo ""
+    print_status "Instructions:"
+    echo "1. Place the certificate value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME in: credentials/cis_certificate.cer"
+    echo "2. Place the key value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME in: credentials/cis_key.key"
+    echo ""
+    
+    # Check if credentials directory exists
+    if [ ! -d "credentials" ]; then
+        print_status "Creating credentials directory..."
+        mkdir -p credentials
+    fi
+    
+    # Check if required files exist
+    CERT_INPUT_FILE="credentials/cis_certificate.cer"
+    KEY_INPUT_FILE="credentials/cis_key.key"
+    
+    if [ ! -f "$CERT_INPUT_FILE" ]; then
+        print_warning "Certificate file not found: $CERT_INPUT_FILE"
+        print_status "Creating certificate file..."
+        echo "# Place the certificate value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME here" > "$CERT_INPUT_FILE"
+        echo "# Replace this line with the actual certificate content" >> "$CERT_INPUT_FILE"
+        print_status "Certificate file created: $CERT_INPUT_FILE"
+        print_status "Please edit this file with the actual certificate value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME"
         echo ""
-        print_status "For option 2, you can:"
-        echo "  - Select from available files in credentials/ and credentials_adjusted/ directories"
-        echo "  - Enter custom paths (relative or absolute)"
-        echo "  - Drag and drop files from Finder"
-        echo "  - Generated files will be saved in credentials_adjusted/ directory"
-    
-    read -p "Select option (1-3): " input_method
-    
-    case $input_method in
-        1)
-            # Direct input method
-            print_warning "Direct input may not work for large certificates"
-            get_input "Enter the certificate value from service binding" "" "CERT_VALUE"
-            get_input "Enter the key value from service binding" "" "KEY_VALUE"
-            ;;
-        2)
-            # File input method
-            print_status "Available files in credentials directory:"
-            
-            # Check if credentials directory exists
-            if [ -d "credentials" ]; then
-                echo "Files in credentials directory:"
-                ls -la credentials/
-                echo ""
-                
-                # Get list of certificate files
-                CERT_FILES=($(find credentials/ -name "*.cer" -o -name "*.crt" -o -name "*.pem" 2>/dev/null))
-                KEY_FILES=($(find credentials/ -name "*.key" -o -name "*.pem" 2>/dev/null))
-                
-                # Also check credentials_adjusted directory
-                if [ -d "credentials_adjusted" ]; then
-                    echo "Files in credentials_adjusted directory:"
-                    ls -la credentials_adjusted/
-                    echo ""
-                    
-                    # Get list of files from credentials_adjusted
-                    ADJUSTED_CERT_FILES=($(find credentials_adjusted/ -name "*.cer" -o -name "*.crt" -o -name "*.pem" 2>/dev/null))
-                    ADJUSTED_KEY_FILES=($(find credentials_adjusted/ -name "*.key" -o -name "*.pem" 2>/dev/null))
-                    
-                    # Combine both directories
-                    CERT_FILES+=("${ADJUSTED_CERT_FILES[@]}")
-                    KEY_FILES+=("${ADJUSTED_KEY_FILES[@]}")
-                fi
-                
-                if [ ${#CERT_FILES[@]} -gt 0 ]; then
-                    echo "Available certificate files:"
-                    for i in "${!CERT_FILES[@]}"; do
-                        echo "  $((i+1)). ${CERT_FILES[$i]}"
-                    done
-                    
-                    read -p "Select certificate file number (1-${#CERT_FILES[@]}) or enter custom path: " cert_choice
-                    
-                    if [[ "$cert_choice" =~ ^[0-9]+$ ]] && [ "$cert_choice" -ge 1 ] && [ "$cert_choice" -le ${#CERT_FILES[@]} ]; then
-                        CERT_INPUT_FILE="${CERT_FILES[$((cert_choice-1))]}"
-                        print_status "Selected certificate file: $CERT_INPUT_FILE"
-                    else
-                        get_input "Enter path to certificate file (or drag and drop file here)" "" "CERT_INPUT_FILE"
-                    fi
-                else
-                    get_input "Enter path to certificate file (or drag and drop file here)" "" "CERT_INPUT_FILE"
-                fi
-                
-                if [ ${#KEY_FILES[@]} -gt 0 ]; then
-                    echo "Available key files:"
-                    for i in "${!KEY_FILES[@]}"; do
-                        echo "  $((i+1)). ${KEY_FILES[$i]}"
-                    done
-                    
-                    read -p "Select key file number (1-${#KEY_FILES[@]}) or enter custom path: " key_choice
-                    
-                    if [[ "$key_choice" =~ ^[0-9]+$ ]] && [ "$key_choice" -ge 1 ] && [ "$key_choice" -le ${#KEY_FILES[@]} ]; then
-                        KEY_INPUT_FILE="${KEY_FILES[$((key_choice-1))]}"
-                        print_status "Selected key file: $KEY_INPUT_FILE"
-                    else
-                        get_input "Enter path to key file (or drag and drop file here)" "" "KEY_INPUT_FILE"
-                    fi
-                else
-                    get_input "Enter path to key file (or drag and drop file here)" "" "KEY_INPUT_FILE"
-                fi
-            else
-                print_warning "Credentials directory not found. Please enter file paths manually."
-                get_input "Enter path to certificate file (or drag and drop file here)" "" "CERT_INPUT_FILE"
-                get_input "Enter path to key file (or drag and drop file here)" "" "KEY_INPUT_FILE"
-            fi
-            
-            # Remove quotes if present (from drag and drop) and normalize path
-            CERT_INPUT_FILE=$(echo "$CERT_INPUT_FILE" | tr -d '"' | tr -d "'")
-            KEY_INPUT_FILE=$(echo "$KEY_INPUT_FILE" | tr -d '"' | tr -d "'")
-            
-            # Normalize path by removing any extra slashes and resolving . and ..
-            CERT_INPUT_FILE=$(realpath "$CERT_INPUT_FILE" 2>/dev/null || echo "$CERT_INPUT_FILE")
-            KEY_INPUT_FILE=$(realpath "$KEY_INPUT_FILE" 2>/dev/null || echo "$KEY_INPUT_FILE")
-            
-            # Show helpful information about path resolution
-            print_status "Certificate file path: $CERT_INPUT_FILE"
-            print_status "Key file path: $KEY_INPUT_FILE"
-            print_status "Current working directory: $(pwd)"
-            
-            # Try to resolve relative paths (only if not already absolute)
-            if [[ "$CERT_INPUT_FILE" != /* ]]; then
-                print_status "Certificate path is relative, resolving from current directory"
-                CERT_INPUT_FILE="$(pwd)/$CERT_INPUT_FILE"
-                print_status "Resolved certificate path: $CERT_INPUT_FILE"
-            else
-                print_status "Certificate path is already absolute"
-            fi
-            
-            if [[ "$KEY_INPUT_FILE" != /* ]]; then
-                print_status "Key path is relative, resolving from current directory"
-                KEY_INPUT_FILE="$(pwd)/$KEY_INPUT_FILE"
-                print_status "Resolved key path: $KEY_INPUT_FILE"
-            else
-                print_status "Key path is already absolute"
-            fi
-            
-            # Check if files exist and provide detailed error information
-            if [ ! -f "$CERT_INPUT_FILE" ]; then
-                print_error "Certificate input file not found: $CERT_INPUT_FILE"
-                print_status "Current working directory: $(pwd)"
-                print_status "Available files in current directory:"
-                ls -la
-                if [ -d "$(dirname "$CERT_INPUT_FILE")" ]; then
-                    print_status "Files in target directory:"
-                    ls -la "$(dirname "$CERT_INPUT_FILE")"
-                fi
-                return 1
-            fi
-            
-            if [ ! -f "$KEY_INPUT_FILE" ]; then
-                print_error "Key input file not found: $KEY_INPUT_FILE"
-                print_status "Current working directory: $(pwd)"
-                print_status "Available files in current directory:"
-                ls -la
-                if [ -d "$(dirname "$KEY_INPUT_FILE")" ]; then
-                    print_status "Files in target directory:"
-                    ls -la "$(dirname "$KEY_INPUT_FILE")"
-                fi
-                return 1
-            fi
-            
-            # Read values from files
-            CERT_VALUE=$(cat "$CERT_INPUT_FILE")
-            KEY_VALUE=$(cat "$KEY_INPUT_FILE")
-            
-            print_status "Certificate and key values loaded from files"
-            ;;
-        3)
-            # Clipboard method (macOS only)
-            if command -v pbcopy &> /dev/null && command -v pbpaste &> /dev/null; then
-                print_status "macOS clipboard detected"
-                echo "Please copy the certificate value to clipboard, then press Enter"
-                read -p "Press Enter after copying certificate to clipboard..."
-                CERT_VALUE=$(pbpaste)
-                
-                echo "Please copy the key value to clipboard, then press Enter"
-                read -p "Press Enter after copying key to clipboard..."
-                KEY_VALUE=$(pbpaste)
-                
-                print_status "Certificate and key values loaded from clipboard"
-            else
-                print_error "Clipboard commands not available. Please use file input method."
-                return 1
-            fi
-            ;;
-        *)
-            print_error "Invalid option selected"
+        read -p "Press Enter after editing the certificate file..."
+        
+        # Check if file still contains placeholder content
+        if grep -q "Place the certificate value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME here" "$CERT_INPUT_FILE"; then
+            print_error "Certificate file still contains placeholder content. Please edit it with the actual certificate value."
             return 1
-            ;;
-    esac
+        fi
+    fi
+    
+    if [ ! -f "$KEY_INPUT_FILE" ]; then
+        print_warning "Key file not found: $KEY_INPUT_FILE"
+        print_status "Creating key file..."
+        echo "# Place the key value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME here" > "$KEY_INPUT_FILE"
+        echo "# Replace this line with the actual key content" >> "$KEY_INPUT_FILE"
+        print_status "Key file created: $KEY_INPUT_FILE"
+        print_status "Please edit this file with the actual key value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME"
+        echo ""
+        read -p "Press Enter after editing the key file..."
+        
+        # Check if file still contains placeholder content
+        if grep -q "Place the key value from $CLOUD_IDENTITY_SERVICE_BINDING_NAME here" "$KEY_INPUT_FILE"; then
+            print_error "Key file still contains placeholder content. Please edit it with the actual key value."
+            return 1
+        fi
+    fi
+    
+    print_status "Found required files:"
+    echo "  Certificate: $CERT_INPUT_FILE"
+    echo "  Key: $KEY_INPUT_FILE"
+    echo ""
+    
+    # Show file contents for verification (first few lines)
+    print_status "Certificate file preview (first 3 lines):"
+    head -3 "$CERT_INPUT_FILE" | sed 's/^/  /'
+    echo ""
+    
+    print_status "Key file preview (first 3 lines):"
+    head -3 "$KEY_INPUT_FILE" | sed 's/^/  /'
+    echo ""
+    
+    # Ask for confirmation
+    read -p "Do you want to proceed with these files? (y/n): " confirm_files
+    
+    if [[ ! "$confirm_files" =~ ^[Yy]$ ]]; then
+        print_status "Certificate file creation cancelled."
+        return 0
+    fi
+    
+    # Read values from files
+    CERT_VALUE=$(cat "$CERT_INPUT_FILE")
+    KEY_VALUE=$(cat "$KEY_INPUT_FILE")
+    
+    print_status "Certificate and key values loaded from files"
     
     # Validate that we have values
     if [ -z "$CERT_VALUE" ] || [ -z "$KEY_VALUE" ]; then
